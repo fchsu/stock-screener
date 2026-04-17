@@ -81,7 +81,7 @@
 
 - 破底翻型態（老余三問）：
   ![老余三問-破底翻型態圖](./assets/pattern.png)
-  *(註：圖片請協助存放至 `specs/001-daily-screener/assets/pattern.png` 即可正常顯示)*
+  _(註：圖片請協助存放至 `specs/001-daily-screener/assets/pattern.png` 即可正常顯示)_
 
 ### Key Entities
 

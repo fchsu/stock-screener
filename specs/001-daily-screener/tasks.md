@@ -7,10 +7,10 @@
 
 **目標**: 專案基礎結構與套件初始化
 
-- [ ] T001 建立專案基礎結構，劃分 `scripts/` 與 `.github/` 目錄（專案根目錄即 Next.js 根目錄）
-- [ ] T002 初始化 Next.js v16 專案於專案根目錄，安裝 Tailwind CSS, shadcn-ui, react-query 等依賴
-- [ ] T003 [P] 建立 Python 虛擬環境並建立 `scripts/automation/requirements.txt` (包含 yfinance, FinMind, pandas, pytest, tenacity)
-- [ ] T004 [P] 設定前端程式碼檢查與格式化工具 (Prettier/ESLint) 於專案根目錄
+- [x] T001 建立專案基礎結構，劃分 `scripts/` 與 `.github/` 目錄（專案根目錄即 Next.js 根目錄）
+- [x] T002 初始化 Next.js v16 專案於專案根目錄，安裝 Tailwind CSS, shadcn-ui, react-query 等依賴
+- [x] T003 [P] 建立 Python 虛擬環境並建立 `scripts/automation/requirements.txt` (包含 yfinance, FinMind, pandas, pytest, tenacity)
+- [x] T004 [P] 設定前端程式碼檢查與格式化工具 (Prettier/ESLint) 於專案根目錄
 
 ---
 
@@ -32,7 +32,7 @@
 **目標**: 前端能順利載入當日篩選結果並顯示股票名稱、代號及 TradingView 連結。首頁預設為當天內容。
 **獨立測試**: 給定 mock 資料時，網頁能正確顯示股票列表與有效的跳轉連結。
 
-*遵守 TDD (Vertical Slices)：每個切面包含對應的 Unit / E2E 測試，先紅 (Red) 後綠 (Green)。*
+_遵守 TDD (Vertical Slices)：每個切面包含對應的 Unit / E2E 測試，先紅 (Red) 後綠 (Green)。_
 
 - [ ] T009 [US1] 撰寫「瀏覽每日篩選結果清單」之 Playwright E2E 測試 (Red) 於 `tests/e2e/us1-view-list.spec.ts`
 - [ ] T010 [US1] 撰寫 `useScreeningResult` React Query Hook 單元測試 (Red) 於 `tests/unit/services/queries.test.ts`
