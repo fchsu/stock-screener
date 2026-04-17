@@ -54,28 +54,28 @@ specs/001-daily-screener/
 ### 原始碼 (儲存庫根目錄)
 
 ```text
-frontend/
-├── src/
-│   ├── app/                # Next.js App Router (頁面與佈局)
-│   ├── components/         # shadcn-ui 與客製化 React 元件
-│   ├── lib/                # 工具函式 (date-fns, Supabase client), 狀態管理 (Zustand)
-│   └── services/           # 資料提取 (react-query 查詢)
-├── tests/
-│   ├── e2e/                # Playwright 端對端測試
-│   └── unit/               # Vitest + MSW 測試輔助
+# 專案根目錄即 Next.js 根目錄
+src/
+├── app/                    # Next.js App Router (頁面與佈局)
+├── components/             # shadcn-ui 與客製化 React 元件
+├── lib/                    # 工具函式 (date-fns, Supabase client)
+└── services/               # 資料提取 (react-query 查詢)
+tests/
+├── e2e/                    # Playwright 端對端測試
+└── unit/                   # Vitest + MSW 測試輔助
 
 scripts/
 └── automation/
     ├── screener.py         # 抓取 FinMind/yfinance 資料的 Python 腳本
     ├── logic.py            # 老余三問技術分析邏輯
     └── requirements.txt    # Python 依賴清單
-    
+
 .github/
 └── workflows/
     └── daily-screener.yml  # GitHub Actions 排程定義
 ```
 
-**結構決策**: 採用分離的前端與腳本資料夾架構 (Frontend + Automation Script)。前端處理介面展示與狀態切換，腳本處理厚重的資料抓取與運算，寫入共用的 Supabase 資料庫。
+**結構決策**: 專案根目錄直接作為 Next.js 根目錄，避免 `frontend/` 子目錄造成雙層 git 的問題。自動化腳本放在 `scripts/` 目錄，前端處理介面展示與狀態切換，腳本處理資料抓取與運算，寫入共用的 Supabase 資料庫。
 
 ## 複雜度追蹤
 
