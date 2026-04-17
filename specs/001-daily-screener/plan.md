@@ -12,9 +12,9 @@
 ## 技術背景
 
 **語言/版本**: 前端使用 TypeScript (Next.js v16)，自動化腳本使用 Python 3.11+
-**主要依賴**: React v19, Tailwind CSS, Zustand, @tanstack/react-query, shadcn-ui, date-fns, yfinance, FinMind, pandas  
+**主要依賴**: React v19, Tailwind CSS, @tanstack/react-query, shadcn-ui, date-fns, yfinance, FinMind, pandas  
 **儲存方案**: Supabase (PostgreSQL 搭配資料列層級安全性 RLS)  
-**測試框架**: Mock Service Worker (MSW), Vitest, Playwright (前端), GitHub Actions (排程)  
+**測試框架**: Mock Service Worker (MSW), Vitest, Playwright (前端), pytest (後端腳本整合測試), GitHub Actions (排程)  
 **部署平台**: Vercel (前端), GitHub Actions (後端腳本)  
 **專案類型**: 網頁應用程式 + 自動化資料管線  
 **效能目標**: 頁面載入與切換小於 3 秒 (運用 Next.js 快取與伺服器元件)  
