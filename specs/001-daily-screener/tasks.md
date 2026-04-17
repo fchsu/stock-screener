@@ -9,7 +9,7 @@
 
 - [ ] T001 建立專案基礎結構，劃分 `frontend/` 與 `scripts/` 目錄
 - [ ] T002 初始化 Next.js v16 專案並安裝 Tailwind CSS, shadcn-ui, react-query 等依賴至 `frontend/`
-- [ ] T003 [P] 建立 Python 虛擬環境並建立 `scripts/automation/requirements.txt` (包含 yfinance, FinMind, pandas, pytest)
+- [ ] T003 [P] 建立 Python 虛擬環境並建立 `scripts/automation/requirements.txt` (包含 yfinance, FinMind, pandas, pytest, tenacity)
 - [ ] T004 [P] 設定前端程式碼檢查與格式化工具 (Prettier/ESLint) 於 `frontend/`
 
 ---
@@ -20,7 +20,7 @@
 
 **⚠️ CRITICAL**: 在此階段完成前，不得開始實作任何使用者故事
 
-- [ ] T005 設定 Supabase 專案，建立 `screening_results` 資料表及 RLS 規則
+- [ ] T005 設定 Supabase 專案，建立 `screening_results` 資料表 (需包含 date 欄位 Index，並確保 status 狀態欄位可供追蹤) 及 RLS 規則
 - [ ] T006 建立前端 Supabase client 實例於 `frontend/src/lib/supabase.ts`
 - [ ] T007 [P] 設定前端 Vitest 與 MSW 測試輔助環境於 `frontend/tests/unit/`
 - [ ] T008 [P] 設定前端 Playwright E2E 測試環境於 `frontend/tests/e2e/`
@@ -64,8 +64,8 @@
 - [ ] T020 [US3] 實作老余三問篩選邏輯，使邏輯單元測試通過 (Green/Refactor) 於 `scripts/automation/logic.py`
 - [ ] T021 [US3] 撰寫「FinMind 台股及 yfinance 美股爬蟲與 Supabase 資料庫寫入」之單元/整合測試 (Red) 於 `scripts/tests/unit/test_screener.py`
 - [ ] T022 [US3] 實作爬蟲模組與狀態寫入邏輯，使爬蟲單元測試及自動化整合測試通過 (Green/Refactor) 於 `scripts/automation/screener.py`
-- [ ] T023 [US3] 前端實作狀態顯示元件（區分台股與美股不同狀態），包含對應之單元與 E2E 測試更新於 `frontend/src/app/page.tsx`
-- [ ] T024 [US3] 建立 GitHub Actions workflow 排程（每日 15:00 執行）於 `.github/workflows/daily-screener.yml`
+- [ ] T023 [US3] 前端實作狀態顯示元件（區分台股與美股不同狀態，並確保透過 Hook 獲取最新 status），包含對應之單元與 E2E 測試更新於 `frontend/src/app/page.tsx`
+- [ ] T024 [US3] 建立 GitHub Actions workflow 排程（設定 UTC cron `0 7 * * *` 對應台灣時間每日 15:00 執行）於 `.github/workflows/daily-screener.yml`
 
 ---
 
