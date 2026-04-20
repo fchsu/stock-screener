@@ -20,10 +20,10 @@
 
 **⚠️ CRITICAL**: 在此階段完成前，不得開始實作任何使用者故事
 
-- [ ] T005 設定 Supabase 專案，建立 `screening_results` 資料表 (需包含 date 欄位 Index，並確保 status 狀態欄位可供追蹤) 及 RLS 規則
-- [ ] T006 建立前端 Supabase client 實例於 `src/lib/supabase.ts`
-- [ ] T007 [P] 設定前端 Vitest 與 MSW 測試輔助環境於 `tests/unit/`
-- [ ] T008 [P] 設定前端 Playwright E2E 測試環境於 `tests/e2e/`
+- [x] T005 設定 Supabase 專案，建立 `screening_results` 資料表 (需包含 date 欄位 Index，並確保 status 狀態欄位可供追蹤) 及 RLS 規則
+- [x] T006 建立前端 Supabase client 實例於 `src/lib/supabase.ts`
+- [x] T007 [P] 設定前端 Vitest 與 MSW 測試輔助環境於 `tests/unit/`
+- [x] T008 [P] 設定前端 Playwright E2E 測試環境於 `tests/e2e/`
 
 ---
 
