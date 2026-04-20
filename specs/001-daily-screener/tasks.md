@@ -47,10 +47,10 @@ _遵守 TDD (Vertical Slices)：每個切面包含對應的 Unit / E2E 測試，
 **目標**: 使用者可以透過點擊相對天數按鈕（如「當天」、「前1天」等），以固定參數連結的頁面切換方式，查看最近 5 個工作天內的任何一天結果。
 **獨立測試**: 點擊相對日期按鈕後，能產生帶有固定參數（如 `/?offset=1`）的網址並透過 App Router 更新畫面，且只提供近 5 天的按鈕。
 
-- [ ] T014 [US2] 撰寫「點擊相對天數按鈕進行頁面切換查看歷史紀錄」之 Playwright E2E 測試 (Red) 於 `tests/e2e/us2-history.spec.ts`
-- [ ] T015 [US2] 撰寫「日期切換按鈕群 (DateNav)」元件（顯示「當天」至「前4天」，並產生如 `/?offset=x` 的固定連結）之單元測試 (Red) 於 `tests/unit/components/DateNav.test.tsx`
-- [ ] T016 [US2] 實作 `DateNav` 元件，使元件單元測試通過 (Green/Refactor) 於 `src/components/DateNav.tsx`
-- [ ] T017 [US2] 實作 Next.js 頁面參數讀取（讀取 URL search params `/?offset=X`）並整合 `DateNav` 更新首頁，確保整體 E2E 測試通過 (Green/Refactor) 於 `src/app/page.tsx`
+- [x] T014 [US2] 撰寫「點擊相對天數按鈕進行頁面切換查看歷史紀錄」之 Playwright E2E 測試 (Red) 於 `tests/e2e/history.spec.ts`
+- [x] T015 [US2] 撰寫「日期切換按鈕群 (DateNav)」元件（顯示「當天」至「前4天」，並產生如 `/?offset=x` 的固定連結）之單元測試 (Red) 於 `tests/unit/components/DateNav.test.tsx`
+- [x] T016 [US2] 實作 `DateNav` 元件，使元件單元測試通過 (Green/Refactor) 於 `src/components/DateNav.tsx`
+- [x] T017 [US2] 實作 Next.js 頁面參數讀取（讀取 URL search params `/?offset=X`）並整合 `DateNav` 更新首頁，確保整體 E2E 測試通過 (Green/Refactor) 於 `src/app/page.tsx`
 
 ---
 
