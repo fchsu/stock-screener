@@ -34,11 +34,11 @@
 
 _遵守 TDD (Vertical Slices)：每個切面包含對應的 Unit / E2E 測試，先紅 (Red) 後綠 (Green)。_
 
-- [ ] T009 [US1] 撰寫「瀏覽每日篩選結果清單」之 Playwright E2E 測試 (Red) 於 `tests/e2e/us1-view-list.spec.ts`
-- [ ] T010 [US1] 撰寫 `useScreeningResult` React Query Hook 單元測試 (Red) 於 `tests/unit/services/queries.test.ts`
-- [ ] T011 [US1] 實作 `StockAsset`、`ScreeningResult` 型別定義與 `useScreeningResult` Hook，使 Hook 單元測試通過 (Green/Refactor) 於 `src/lib/types.ts` 與 `src/services/queries.ts`
-- [ ] T012 [US1] 撰寫首頁 UI 渲染清單（含載入中、股票列表、TradingView連結）之單元測試 (Red) 於 `tests/unit/components/StockList.test.tsx`
-- [ ] T013 [US1] 實作首頁 UI 渲染元件，使單元測試通過，並確認整體 E2E 測試順利通過 (Green/Refactor) 於 `src/app/page.tsx`
+- [x] T009 [US1] 撰寫「瀏覽每日篩選結果清單」之 Playwright E2E 測試 (Red) 於 `tests/e2e/view-list.spec.ts`
+- [x] T010 [US1] 撰寫 `useScreeningResult` React Query Hook 單元測試 (Red) 於 `tests/unit/services/queries.test.ts`
+- [x] T011 [US1] 實作 `StockAsset`、`ScreeningResult` 型別定義與 `useScreeningResult` Hook，使 Hook 單元測試通過 (Green/Refactor) 於 `src/lib/types.ts` 與 `src/services/queries.ts`
+- [x] T012 [US1] 撰寫首頁 UI 渲染清單（含載入中、股票列表、TradingView連結）之單元測試 (Red) 於 `tests/unit/components/StockList.test.tsx`
+- [x] T013 [US1] 實作首頁 UI 渲染元件，使單元測試通過，並確認整體 E2E 測試順利通過 (Green/Refactor) 於 `src/app/page.tsx`
 
 ---
 
