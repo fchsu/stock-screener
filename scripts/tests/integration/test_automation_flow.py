@@ -27,22 +27,25 @@ def test_automation_flow_success(mock_fetch_twse, mock_fetch_us, mock_supabase):
     assert mock_supabase.table.called
 
 @patch('automation.screener.supabase')
-@patch('automation.screener.requests.get')
-def test_automation_flow_retry_on_failure(mock_get, mock_supabase):
+@patch('automation.screener.is_market_open', return_value=True)
+@patch('automation.screener.yf.download')
+def test_automation_flow_retry_on_failure(mock_download, mock_is_open, mock_supabase):
     """
     Test that the automation flow retries up to 3 times on failure.
+    fetch_single_twse 使用 yfinance，tenacity 會在失敗時重試。
     """
-    # Setup requests.get to fail twice then succeed
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"msg": "success", "data": []}
-    mock_get.side_effect = [Exception("Network error"), Exception("Network error"), mock_response]
-    
-    # We patch fetch_and_screen_us to just return empty so it doesn't fail
+    import pandas as pd
+
+    # yf.download 前兩次失敗，第三次回傳空 DataFrame（模擬無資料）
+    mock_download.side_effect = [
+        Exception("Network error"),
+        Exception("Network error"),
+        pd.DataFrame()  # 空 DataFrame，不會觸發篩選邏輯
+    ]
+
     with patch('automation.screener.fetch_and_screen_us', return_value=[]):
-        # We also need to mock get_twse_symbols to return just 1 symbol so it retries on that 1 symbol
-        with patch('automation.screener.get_twse_symbols', return_value=['2330']):
+        with patch('automation.screener.get_twse_symbols', return_value=(['2330'], {'2330': '台積電'})):
             run_automation_flow()
-    
-    # It should have been called 3 times (2 failures + 1 success) for the single symbol
-    assert mock_get.call_count == 3
+
+    # fetch_single_twse 內部 tenacity 會重試，yf.download 應被呼叫 3 次
+    assert mock_download.call_count == 3

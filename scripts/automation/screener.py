@@ -30,32 +30,27 @@ if SUPABASE_URL and SUPABASE_KEY:
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def get_twse_symbols():
-    url = "https://api.finmindtrade.com/api/v4/data"
-    params = {
-        "dataset": "TaiwanStockPrice",
-        "date": run_date.strftime("%Y-%m-%d")
-    }
+    """從 TWSE OpenAPI 取得當日全市場行情，過濾成交量 >= 1,000,000 股的標的。
+    回傳 (symbols, name_map)，name_map 為 {代號: 中文名稱} 的映射。
+    """
+    url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
     try:
-        resp = requests.get(url, params=params, timeout=10)
+        resp = requests.get(url, timeout=15)
         resp.raise_for_status()
         data = resp.json()
-        if data.get("msg") == "success" and data.get("data"):
-            df = pd.DataFrame(data["data"])
-            if not df.empty:
-                # Filter: type == 'twse' and Trading_Volume >= 1000000 (1000張)
-                # Note: The api returns volume in shares for TaiwanStockPrice
-                filtered = df[(df['type'] == 'twse') & (df['Trading_Volume'] >= 1000000)]
-                
-                # CRITICAL: FinMind free tier limit is 300 requests/hour.
-                # To prevent API blocks on high volume days (where >300 stocks might pass the filter),
-                # we strictly take the top 250 stocks by volume.
-                filtered = filtered.sort_values(by='Trading_Volume', ascending=False).head(250)
-                
-                return filtered['stock_id'].tolist()
+        if data:
+            df = pd.DataFrame(data)
+            # TradeVolume 是字串格式，需轉數值
+            df['TradeVolume'] = pd.to_numeric(df['TradeVolume'].str.replace(',', ''), errors='coerce')
+            filtered = df[df['TradeVolume'] >= 1000000]
+            filtered = filtered.sort_values(by='TradeVolume', ascending=False)
+
+            symbols = filtered['Code'].tolist()
+            name_map = dict(zip(filtered['Code'], filtered['Name']))
+            return symbols, name_map
     except Exception as e:
         print(f"Failed to fetch TWSE dynamic list: {e}")
-    # 若 API 失敗或回傳 400 (例如國定假日休市無資料)，則回傳空陣列代表無資料
-    return []
+    return [], {}
 
 # US symbols are fetched directly inside fetch_and_screen_us to optimize bulk download
 
@@ -85,62 +80,65 @@ def convert_to_weekly(df: pd.DataFrame) -> pd.DataFrame:
     return df_weekly
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-def fetch_single_twse(symbol):
-    url = "https://api.finmindtrade.com/api/v4/data"
-    params = {
-        "dataset": "TaiwanStockPrice",
-        "data_id": symbol,
-        "start_date": (run_date - pd.Timedelta(days=1500)).strftime("%Y-%m-%d") # 抓取約 4 年
-    }
-    resp = requests.get(url, params=params, timeout=10)
-    resp.raise_for_status()
-    data = resp.json()
-    if data.get("msg") == "success" and data.get("data"):
-        daily_data = pd.DataFrame(data["data"])
-        if daily_data.empty:
-            return None, None
-        daily_data = daily_data.rename(columns={"open": "Open", "max": "High", "min": "Low", "close": "Close"})
-        daily_data['date'] = pd.to_datetime(daily_data['date'])
-        daily_data.set_index('date', inplace=True)
-        
-        weekly_data = convert_to_weekly(daily_data)
-        return daily_data, weekly_data
-    return None, None
+def bulk_download_with_retry(tickers):
+    """用 yfinance 批次下載股票歷史資料，包含自動重試與進度隱藏。"""
+    return yf.download(tickers, period="4y", progress=False, threads=True)
 
 def fetch_and_screen_twse():
     if not is_market_open(run_date):
-        return "holiday"
+        return "closed"
         
-    symbols = get_twse_symbols()
+    symbols, name_map = get_twse_symbols()
     if not symbols:
-        return "no_data"
+        return "closed"
         
     results = []
+    tickers = [f"{s}.TW" for s in symbols]
     
-    for symbol in symbols:
-        try:
-            daily_data, weekly_data = fetch_single_twse(symbol)
-            if daily_data is not None and not daily_data.empty and weekly_data is not None and not weekly_data.empty:
-                if evaluate_trend_reversal_criteria(daily_data, weekly_data):
+    try:
+        data = bulk_download_with_retry(tickers)
+        if data.empty:
+            return results
+
+        for symbol in symbols:
+            ticker = f"{symbol}.TW"
+            try:
+                if len(tickers) == 1:
+                    df_ticker = data.copy()
+                else:
+                    if ticker not in data.columns.levels[1]:
+                        continue
+                    df_ticker = data.xs(ticker, level=1, axis=1).dropna(how='all')
+
+                if df_ticker.empty or len(df_ticker) < 60:
+                    continue
+                    
+                weekly_data = convert_to_weekly(df_ticker)
+                if evaluate_trend_reversal_criteria(df_ticker, weekly_data):
                     results.append({
-                        "symbol": f"{symbol}.TW",
-                        "name": symbol,
+                        "symbol": ticker,
+                        "name": name_map.get(symbol, symbol),
                         "market": "TWSE"
                     })
-        except Exception as e:
-            print(f"Failed to fetch TWSE {symbol}: {e}")
+            except Exception as e:
+                print(f"Failed to process TWSE {symbol}: {e}")
+    except Exception as e:
+        print(f"Failed to bulk fetch TWSE: {e}")
             
     return results
 
 def fetch_and_screen_us():
     if not is_market_open(run_date):
-        return "holiday"
+        return "closed"
         
     results = []
     try:
         # Fetch S&P 500 symbols from wikipedia
         url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-        tables = pd.read_html(url)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        html = requests.get(url, headers=headers).text
+        from io import StringIO
+        tables = pd.read_html(StringIO(html))
         df_sp500 = tables[0]
         tickers = df_sp500['Symbol'].tolist()
         
@@ -148,9 +146,9 @@ def fetch_and_screen_us():
         tickers = [t.replace('.', '-') for t in tickers]
         
         # 一次性發送 500 個併發請求，直接抓取 4 年歷史資料
-        data = yf.download(tickers, period="4y", progress=False)
+        data = bulk_download_with_retry(tickers)
         if data.empty:
-            return "no_data"
+            return "closed"
             
         for ticker in tickers:
             try:
@@ -212,6 +210,7 @@ def run_automation_flow():
         ], on_conflict="date,market").execute()
         
     try:
+        print(f"[{today}] Fetching TWSE data...")
         twse_results = fetch_and_screen_twse()
         if supabase:
             twse_status = twse_results if isinstance(twse_results, str) else "completed"
@@ -222,7 +221,12 @@ def run_automation_flow():
                 "status": twse_status,
                 "assets": twse_assets
             }, on_conflict="date,market").execute()
+            if isinstance(twse_results, list):
+                print(f"TWSE: successfully screened {len(twse_results)} stocks: {[r['symbol'] for r in twse_results]}")
+            else:
+                print(f"TWSE: status is {twse_status}")
             
+        print(f"[{today}] Fetching NASDAQ data...")
         us_results = fetch_and_screen_us()
         if supabase:
             us_status = us_results if isinstance(us_results, str) else "completed"
@@ -233,6 +237,10 @@ def run_automation_flow():
                 "status": us_status,
                 "assets": us_assets
             }, on_conflict="date,market").execute()
+            if isinstance(us_results, list):
+                print(f"NASDAQ: successfully screened {len(us_results)} stocks: {[r['symbol'] for r in us_results]}")
+            else:
+                print(f"NASDAQ: status is {us_status}")
             
         # 執行舊資料清理
         cleanup_old_data()

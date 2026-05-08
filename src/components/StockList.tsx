@@ -39,6 +39,12 @@ export default function StockList({ date }: { date: string }) {
             抓取失敗
           </div>
         )}
+        
+        {result.status === 'closed' && (
+          <div className="rounded-lg bg-yellow-50 p-4 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">
+            今日休市
+          </div>
+        )}
 
         {result.status === 'completed' && result.assets && result.assets.length > 0 && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

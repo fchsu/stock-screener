@@ -78,12 +78,29 @@ _遵守 TDD (Vertical Slices)：每個切面包含對應的 Unit / E2E 測試，
 
 ---
 
-## Phase 7: Polish & Cross-Cutting Concerns
+## Phase 7: 資料來源遷移 — FinMind → TWSE OpenAPI + yfinance (FR-011)
+
+**目標**: 將台股資料來源從已無法免費使用的 FinMind API 遷移至 TWSE OpenAPI + yfinance，確保所有既有測試通過且符合 FR-004（200 根日 K + 200 根週 K）與 FR-011（動態清單 + 前置過濾）需求。
+**獨立測試**: 遷移後執行完整測試套件（unit + integration），所有測試通過。
+
+**遷移背景**: FinMind 免費 tier 已不允許不帶 `data_id` 的全表查詢（回傳 400: `"Please update your user level"`）。改用 TWSE OpenAPI `STOCK_DAY_ALL`（免費、無 token、穩定）取得動態清單，yfinance `{code}.TW` 取得個股歷史 OHLC（需涵蓋至少 200 週 ≈ 4 年，以同時滿足 200 根日 K 與 200 根週 K）。
+
+- [x] T026 重構 `get_twse_symbols()` 從 FinMind API 遷移至 TWSE OpenAPI `STOCK_DAY_ALL`，實作成交量前置過濾（>= 1000 張 = 1,000,000 股），回傳 `(symbols: list[str], name_map: dict[str, str])` 以保留股票名稱映射 於 `scripts/automation/screener.py`
+- [x] T027 重構 `fetch_single_twse()` 從 FinMind API 遷移至 yfinance `{code}.TW`，取得歷史 OHLC 並轉換為標準格式 於 `scripts/automation/screener.py`
+- [x] T028 更新 `fetch_and_screen_twse()` 以整合新的 `get_twse_symbols()` 回傳格式（含 name_map），確保寫入 Supabase 時 `name` 欄位為中文股票名稱 於 `scripts/automation/screener.py`
+- [x] T029 更新單元測試以對應新資料來源的 Mock 結構（TWSE OpenAPI JSON 格式、yfinance DataFrame 格式），確保所有 unit test 通過 於 `scripts/tests/unit/test_screener.py`
+- [x] T030 更新整合測試以對應新的 `get_twse_symbols` 回傳格式與 `fetch_single_twse` Mock，確保 integration test 通過 於 `scripts/tests/integration/test_automation_flow.py`
+- [x] T031 從 `scripts/automation/requirements.txt` 移除 FinMind 依賴，執行 `pip install -r requirements.txt` 驗證乾淨安裝
+- [x] T032 以 `TARGET_DATE` 指定最近一個交易日，手動執行 `screener.py` 驗證端到端流程正常完成
+
+---
+
+## Phase 8: Polish & Cross-Cutting Concerns
 
 **目標**: 整體效能優化、文件完善
 
-- [ ] T026 [P] 補充專案 README.md，包含本機啟動步驟與部署說明
-- [ ] T027 確保 Next.js SSR/ISR 設定生效，檢查效能指標並消除 Waterfall 請求於 `src/app/page.tsx`
+- [ ] T033 [P] 補充專案 README.md，包含本機啟動步驟與部署說明
+- [ ] T034 確保 Next.js SSR/ISR 設定生效，檢查效能指標並消除 Waterfall 請求於 `src/app/page.tsx`
 
 ---
 
@@ -94,7 +111,8 @@ _遵守 TDD (Vertical Slices)：每個切面包含對應的 Unit / E2E 測試，
 - **Setup (Phase 1)**: 無依賴，可立即開始
 - **Foundational (Phase 2)**: 依賴 Setup 完成，阻擋所有使用者故事
 - **User Stories (Phase 3+)**: 依賴 Foundational 完成後即可進行
-- **Polish (Final Phase)**: 依賴所有選定的使用者故事完成
+- **Migration (Phase 7)**: 依賴 Phase 5/6 完成，必須在 Polish 前完成
+- **Polish (Final Phase)**: 依賴所有使用者故事與遷移完成
 
 ### User Story Dependencies
 
@@ -107,3 +125,4 @@ _遵守 TDD (Vertical Slices)：每個切面包含對應的 Unit / E2E 測試，
 - 嚴格遵守 **TDD Vertical Slices**: 每個小節 (Red) -> (Green) 必須循序進行，不應在未通過測試前撰寫下一段實作。
 - Phase 1 & 2 內的設定任務可由不同成員平行處理。
 - Foundational 完成後，US1 (前端 UI) 與 US3 (爬蟲腳本) 的 TDD 循環可完全由不同成員平行開發。
+- Phase 7 Migration 的 T026-T028 為同一檔案的連續修改，必須循序執行；T029-T030 測試更新可在實作完成後平行進行。
