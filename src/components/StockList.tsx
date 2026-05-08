@@ -21,32 +21,46 @@ export default function StockList({ date }: { date: string }) {
   const twseResult = data.find((item) => item.market === 'TWSE')
   const nasdaqResult = data.find((item) => item.market === 'NASDAQ')
 
-  const twseStocks = twseResult?.assets || []
-  const nasdaqStocks = nasdaqResult?.assets || []
+  const renderMarketSection = (title: string, result: typeof twseResult) => {
+    if (!result) return null
+
+    return (
+      <section>
+        <h2 className="mb-4 text-2xl font-bold">{title}</h2>
+        
+        {result.status === 'fetching' && (
+          <div className="rounded-lg bg-blue-50 p-4 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+            資料抓取中...
+          </div>
+        )}
+        
+        {result.status === 'failed' && (
+          <div className="rounded-lg bg-red-50 p-4 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+            抓取失敗
+          </div>
+        )}
+
+        {result.status === 'completed' && result.assets && result.assets.length > 0 && (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {result.assets.map((stock) => (
+              <StockCard key={stock.symbol} stock={stock} />
+            ))}
+          </div>
+        )}
+        
+        {result.status === 'completed' && (!result.assets || result.assets.length === 0) && (
+          <div className="rounded-lg bg-gray-50 p-4 text-gray-500 dark:bg-gray-800/50 dark:text-gray-400">
+            無符合條件的股票
+          </div>
+        )}
+      </section>
+    )
+  }
 
   return (
     <div className="space-y-8">
-      {twseStocks.length > 0 && (
-        <section>
-          <h2 className="mb-4 text-2xl font-bold">台股</h2>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {twseStocks.map((stock) => (
-              <StockCard key={stock.symbol} stock={stock} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {nasdaqStocks.length > 0 && (
-        <section>
-          <h2 className="mb-4 text-2xl font-bold">美股</h2>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {nasdaqStocks.map((stock) => (
-              <StockCard key={stock.symbol} stock={stock} />
-            ))}
-          </div>
-        </section>
-      )}
+      {renderMarketSection('台股', twseResult)}
+      {renderMarketSection('美股', nasdaqResult)}
     </div>
   )
 }

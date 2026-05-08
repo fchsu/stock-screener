@@ -41,4 +41,45 @@ test.describe('US1: View Daily Screening Results', () => {
     await expect(nasdaqSection.getByText('NVDA')).toBeVisible()
     await expect(nasdaqSection.getByText('NVIDIA Corporation')).toBeVisible()
   })
+
+  test('should display fetching and failed status', async ({ page }) => {
+    const mockStatusResults = [
+      {
+        id: 'mock-uuid-3',
+        date: '2026-04-18',
+        market: 'TWSE',
+        status: 'fetching',
+        assets: [],
+        updated_at: '2026-04-18T07:00:00Z',
+      },
+      {
+        id: 'mock-uuid-4',
+        date: '2026-04-18',
+        market: 'NASDAQ',
+        status: 'failed',
+        assets: [],
+        updated_at: '2026-04-18T07:00:00Z',
+      },
+    ]
+
+    await page.route('**/rest/v1/screening_results*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockStatusResults),
+      })
+    })
+
+    await page.goto('/')
+
+    // 驗證台股顯示抓取中
+    const twseSection = page.locator('section', { hasText: '台股' })
+    await expect(twseSection).toBeVisible()
+    await expect(twseSection.getByText('資料抓取中...')).toBeVisible()
+
+    // 驗證美股顯示失敗
+    const nasdaqSection = page.locator('section', { hasText: '美股' })
+    await expect(nasdaqSection).toBeVisible()
+    await expect(nasdaqSection.getByText('抓取失敗')).toBeVisible()
+  })
 })

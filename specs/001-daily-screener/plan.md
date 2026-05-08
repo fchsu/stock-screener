@@ -17,6 +17,7 @@
 **測試框架**: Mock Service Worker (MSW), Vitest, Playwright (前端), pytest (後端腳本整合測試), GitHub Actions (排程)  
 **部署平台**: Vercel (前端), GitHub Actions (後端腳本)  
 **專案類型**: 網頁應用程式 + 自動化資料管線  
+**環境變數**: 支援 `TARGET_DATE` 以指定爬蟲腳本之虛擬執行日期（預設為當日）。
 **效能目標**: 頁面載入與切換小於 3 秒 (運用 Next.js 快取與伺服器元件)  
 **限制條件**: 零成本營運 (利用 Supabase, Vercel, GitHub Actions 免費額度)，嚴格執行 TDD  
 **規模/範圍**: 個人使用，極低的資料庫讀寫量 (最多儲存/查詢近 5 天的資料)

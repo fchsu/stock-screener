@@ -20,7 +20,7 @@
 
 **⚠️ CRITICAL**: 在此階段完成前，不得開始實作任何使用者故事
 
-- [x] T005 設定 Supabase 專案，建立 `screening_results` 資料表 (需包含 date 欄位 Index，並確保 status 狀態欄位可供追蹤) 及 RLS 規則
+- [x] T005 設定 Supabase 專案，建立 `screening_results` 資料表 (需包含 date 欄位 Index，並確保 status 狀態欄位可供追蹤)、RLS 規則與舊資料清理機制 (Retention Policy)
 - [x] T006 建立前端 Supabase client 實例於 `src/lib/supabase.ts`
 - [x] T007 [P] 設定前端 Vitest 與 MSW 測試輔助環境於 `tests/unit/`
 - [x] T008 [P] 設定前端 Playwright E2E 測試環境於 `tests/e2e/`
@@ -59,22 +59,31 @@ _遵守 TDD (Vertical Slices)：每個切面包含對應的 Unit / E2E 測試，
 **目標**: 透過 GitHub Actions 與 Python 腳本自動抓取資料、套用老余三問邏輯並更新 Supabase。
 **獨立測試**: 執行排程腳本整合測試能正確觸發爬蟲，遇錯誤能重試 3 次，並成功寫入狀態與結果至資料庫。
 
-- [ ] T018 [US3] 撰寫 Python 腳本「爬取資料並寫入資料庫」之整合測試 (Integration Test，使用 pytest) (Red) 於 `scripts/tests/integration/test_automation_flow.py`
-- [ ] T019 [US3] 撰寫「老余三問（位置、慣性、圖-破底翻）」技術分析邏輯之單元測試 (Red) 於 `scripts/tests/unit/test_logic.py`
-- [ ] T020 [US3] 實作老余三問篩選邏輯，使邏輯單元測試通過 (Green/Refactor) 於 `scripts/automation/logic.py`
-- [ ] T021 [US3] 撰寫「FinMind 台股及 yfinance 美股爬蟲與 Supabase 資料庫寫入」之單元/整合測試 (Red) 於 `scripts/tests/unit/test_screener.py`
-- [ ] T022 [US3] 實作爬蟲模組與狀態寫入邏輯，使爬蟲單元測試及自動化整合測試通過 (Green/Refactor) 於 `scripts/automation/screener.py`
-- [ ] T023 [US3] 前端實作狀態顯示元件（區分台股與美股不同狀態，並確保透過 Hook 獲取最新 status），包含對應之單元與 E2E 測試更新於 `src/app/page.tsx`
-- [ ] T024 [US3] 建立 GitHub Actions workflow 排程（設定 UTC cron `0 7 * * *` 對應台灣時間每日 15:00 執行）於 `.github/workflows/daily-screener.yml`
+- [x] T018 [US3] 垂直切片一：實作「老余三問」核心技術分析邏輯，並撰寫獨立測試驗證型態特徵 (Red/Green/Refactor) 於 `scripts/automation/logic.py` 與 `scripts/tests/unit/test_logic.py`
+- [x] T019 [US3] 垂直切片二：實作台美股爬蟲模組與狀態寫入邏輯（含重試、休市處理），並撰寫整合測試（僅 Mock 外部 API，不 Mock 內部實作） (Red/Green/Refactor) 於 `scripts/automation/screener.py` 與 `scripts/tests/unit/test_screener.py`
+- [x] T020 [US3] 垂直切片三：實作排程主程式流程 (`run_automation_flow`) 與舊資料清理，搭配端到端整合測試 (Red/Green/Refactor) 於 `scripts/tests/integration/test_automation_flow.py`
+- [x] T021 [US3] 前端實作狀態顯示元件（區分台股與美股不同狀態，並確保透過 Hook 獲取最新 status），包含對應之單元與 E2E 測試更新於 `src/app/page.tsx`
+- [x] T022 [US3] 建立 GitHub Actions workflow 排程（設定 UTC cron `0 7 * * *`）於 `.github/workflows/daily-screener.yml`
+- [x] T023 [US3] 支援透過 `TARGET_DATE` 環境變數覆寫爬蟲腳本之執行日期，以利假日手動測試與回測 於 `scripts/automation/screener.py`
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Concerns
+## Phase 6: 動態獲取股票清單 (User Story 4 / FR-011)
+
+**目標**: 系統能從外部 API 動態獲取最新股票清單，並套用價量前置過濾，以優化執行效能。
+**獨立測試**: 獨立測試抓取函式是否能傳回長度大於 0 的代碼陣列，且符合篩選條件。
+
+- [x] T024 [US4] 垂直切片一：實作台股動態獲取與前置過濾機制，並撰寫符合 TDD 的整合測試驗證 (Red/Green/Refactor) 於 `scripts/automation/screener.py`
+- [x] T025 [US4] 垂直切片二：實作美股從 Wikipedia 獲取清單並透過 yfinance 批量下載 4 年歷史資料與前置過濾，搭配測試驗證 (Red/Green/Refactor) 於 `scripts/automation/screener.py`
+
+---
+
+## Phase 7: Polish & Cross-Cutting Concerns
 
 **目標**: 整體效能優化、文件完善
 
-- [ ] T025 [P] 補充專案 README.md，包含本機啟動步驟與部署說明
-- [ ] T026 確保 Next.js SSR/ISR 設定生效，檢查效能指標並消除 Waterfall 請求於 `src/app/page.tsx`
+- [ ] T026 [P] 補充專案 README.md，包含本機啟動步驟與部署說明
+- [ ] T027 確保 Next.js SSR/ISR 設定生效，檢查效能指標並消除 Waterfall 請求於 `src/app/page.tsx`
 
 ---
 
