@@ -118,7 +118,8 @@ def fetch_and_screen_twse():
                     results.append({
                         "symbol": ticker,
                         "name": name_map.get(symbol, symbol),
-                        "market": "TWSE"
+                        "market": "TWSE",
+                        "tradingViewUrl": f"https://tw.tradingview.com/chart/eEagIIPe/?symbol={symbol}"
                     })
             except Exception as e:
                 print(f"Failed to process TWSE {symbol}: {e}")
@@ -175,7 +176,8 @@ def fetch_and_screen_us():
                     results.append({
                         "symbol": ticker,
                         "name": ticker,
-                        "market": "NASDAQ"
+                        "market": "US",
+                        "tradingViewUrl": f"https://tw.tradingview.com/chart/eEagIIPe/?symbol={ticker}"
                     })
             except Exception as e:
                 print(f"Failed to process US {ticker}: {e}")

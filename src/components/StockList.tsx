@@ -1,10 +1,10 @@
 'use client'
 
 import { useScreeningResult } from '@/services/queries'
-import type { StockAsset } from '@/lib/types'
+import type { StockAsset, ScreeningResult } from '@/lib/types'
 
-export default function StockList({ date }: { date: string }) {
-  const { data, isLoading, isError } = useScreeningResult(date)
+export default function StockList({ date, initialData }: { date: string; initialData?: ScreeningResult[] }) {
+  const { data, isLoading, isError } = useScreeningResult(date, initialData)
 
   if (isLoading) {
     return <div className="p-4 text-center text-gray-500">載入中...</div>
@@ -19,7 +19,7 @@ export default function StockList({ date }: { date: string }) {
   }
 
   const twseResult = data.find((item) => item.market === 'TWSE')
-  const nasdaqResult = data.find((item) => item.market === 'NASDAQ')
+  const nasdaqResult = data.find((item) => item.market === 'NASDAQ' || item.market === 'US')
 
   const renderMarketSection = (title: string, result: typeof twseResult) => {
     if (!result) return null
@@ -72,6 +72,10 @@ export default function StockList({ date }: { date: string }) {
 }
 
 function StockCard({ stock }: { stock: StockAsset }) {
+  // 確保相容舊資料：若無 tradingViewUrl 則動態生成
+  const code = stock.market === 'TWSE' ? stock.symbol.split('.')[0] : stock.symbol
+  let tvUrl = stock.tradingViewUrl
+
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
       <div className="flex items-center justify-between">

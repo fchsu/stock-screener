@@ -1,6 +1,8 @@
 import StockList from '@/components/StockList'
 import DateNav from '@/components/DateNav'
 
+import { fetchScreeningResultsServer } from '@/services/queries'
+
 export default async function Home({
   searchParams,
 }: {
@@ -13,6 +15,9 @@ export default async function Home({
   const targetDate = new Date()
   targetDate.setDate(targetDate.getDate() - offset)
   const targetDateStr = targetDate.toISOString().split('T')[0]
+  
+  // SSR 預取當日篩選結果，消除 Waterfall
+  const initialData = await fetchScreeningResultsServer(targetDateStr)
 
   return (
     <div className="space-y-8">
@@ -22,7 +27,7 @@ export default async function Home({
       </header>
 
       <DateNav currentOffset={offset} />
-      <StockList date={targetDateStr} />
+      <StockList date={targetDateStr} initialData={initialData} />
     </div>
   )
 }

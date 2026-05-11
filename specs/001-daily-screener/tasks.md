@@ -99,8 +99,8 @@ _遵守 TDD (Vertical Slices)：每個切面包含對應的 Unit / E2E 測試，
 
 **目標**: 整體效能優化、文件完善
 
-- [ ] T033 [P] 補充專案 README.md，包含本機啟動步驟與部署說明
-- [ ] T034 確保 Next.js SSR/ISR 設定生效，檢查效能指標並消除 Waterfall 請求於 `src/app/page.tsx`
+- `[x]` T033 [P] 補充專案 README.md，包含本機啟動步驟與部署說明
+- `[x]` T034 確保 Next.js SSR/ISR 設定生效，檢查效能指標並消除 Waterfall 請求於 `src/app/page.tsx`
 
 ---
 

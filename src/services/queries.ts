@@ -14,11 +14,14 @@ const fetchScreeningResults = async (date: string): Promise<ScreeningResult[]> =
   return data as unknown as ScreeningResult[]
 }
 
+export const fetchScreeningResultsServer = fetchScreeningResults;
+
 // React Query Hook
-export const useScreeningResult = (date: string) => {
+export const useScreeningResult = (date: string, initialData?: ScreeningResult[]) => {
   return useQuery({
     queryKey: ['screeningResults', date],
     queryFn: () => fetchScreeningResults(date),
     staleTime: 1000 * 60 * 5, // 5分鐘內不重新請求
+    initialData,
   })
 }
