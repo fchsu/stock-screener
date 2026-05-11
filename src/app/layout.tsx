@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: '自動股票篩選',
   description: '老余三問股票篩選結果清單',
+  icons: {
+    icon: 'data:image/x-icon;base64,', // 強制瀏覽器不要發出 request
+  },
 }
 
 export default function RootLayout({
