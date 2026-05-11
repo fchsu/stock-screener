@@ -1,0 +1,128 @@
+# Tasks: 自動股票篩選網站
+
+**輸入**: 設計文件來自 `/specs/001-daily-screener/`
+**前置條件**: plan.md (必填), spec.md (使用者故事), research.md, data-model.md
+
+## Phase 1: Setup (環境設定)
+
+**目標**: 專案基礎結構與套件初始化
+
+- [x] T001 建立專案基礎結構，劃分 `scripts/` 與 `.github/` 目錄（專案根目錄即 Next.js 根目錄）
+- [x] T002 初始化 Next.js v16 專案於專案根目錄，安裝 Tailwind CSS, shadcn-ui, react-query 等依賴
+- [x] T003 [P] 建立 Python 虛擬環境並建立 `scripts/automation/requirements.txt` (包含 yfinance, FinMind, pandas, pytest, tenacity)
+- [x] T004 [P] 設定前端程式碼檢查與格式化工具 (Prettier/ESLint) 於專案根目錄
+
+---
+
+## Phase 2: Foundational (核心基礎)
+
+**目標**: 完成所有後續功能開發所必須依賴的基礎建設
+
+**⚠️ CRITICAL**: 在此階段完成前，不得開始實作任何使用者故事
+
+- [x] T005 設定 Supabase 專案，建立 `screening_results` 資料表 (需包含 date 欄位 Index，並確保 status 狀態欄位可供追蹤)、RLS 規則與舊資料清理機制 (Retention Policy)
+- [x] T006 建立前端 Supabase client 實例於 `src/lib/supabase.ts`
+- [x] T007 [P] 設定前端 Vitest 與 MSW 測試輔助環境於 `tests/unit/`
+- [x] T008 [P] 設定前端 Playwright E2E 測試環境於 `tests/e2e/`
+
+---
+
+## Phase 3: User Story 1 - 瀏覽每日篩選結果清單 (Priority: P1) 🎯 MVP
+
+**目標**: 前端能順利載入當日篩選結果並顯示股票名稱、代號及 TradingView 連結。首頁預設為當天內容。
+**獨立測試**: 給定 mock 資料時，網頁能正確顯示股票列表與有效的跳轉連結。
+
+_遵守 TDD (Vertical Slices)：每個切面包含對應的 Unit / E2E 測試，先紅 (Red) 後綠 (Green)。_
+
+- [x] T009 [US1] 撰寫「瀏覽每日篩選結果清單」之 Playwright E2E 測試 (Red) 於 `tests/e2e/view-list.spec.ts`
+- [x] T010 [US1] 撰寫 `useScreeningResult` React Query Hook 單元測試 (Red) 於 `tests/unit/services/queries.test.ts`
+- [x] T011 [US1] 實作 `StockAsset`、`ScreeningResult` 型別定義與 `useScreeningResult` Hook，使 Hook 單元測試通過 (Green/Refactor) 於 `src/lib/types.ts` 與 `src/services/queries.ts`
+- [x] T012 [US1] 撰寫首頁 UI 渲染清單（含載入中、股票列表、TradingView連結）之單元測試 (Red) 於 `tests/unit/components/StockList.test.tsx`
+- [x] T013 [US1] 實作首頁 UI 渲染元件，使單元測試通過，並確認整體 E2E 測試順利通過 (Green/Refactor) 於 `src/app/page.tsx`
+
+---
+
+## Phase 4: User Story 2 - 切換查看歷史篩選紀錄 (Priority: P2)
+
+**目標**: 使用者可以透過點擊相對天數按鈕（如「當天」、「前1天」等），以固定參數連結的頁面切換方式，查看最近 5 個工作天內的任何一天結果。
+**獨立測試**: 點擊相對日期按鈕後，能產生帶有固定參數（如 `/?offset=1`）的網址並透過 App Router 更新畫面，且只提供近 5 天的按鈕。
+
+- [x] T014 [US2] 撰寫「點擊相對天數按鈕進行頁面切換查看歷史紀錄」之 Playwright E2E 測試 (Red) 於 `tests/e2e/history.spec.ts`
+- [x] T015 [US2] 撰寫「日期切換按鈕群 (DateNav)」元件（顯示「當天」至「前4天」，並產生如 `/?offset=x` 的固定連結）之單元測試 (Red) 於 `tests/unit/components/DateNav.test.tsx`
+- [x] T016 [US2] 實作 `DateNav` 元件，使元件單元測試通過 (Green/Refactor) 於 `src/components/DateNav.tsx`
+- [x] T017 [US2] 實作 Next.js 頁面參數讀取（讀取 URL search params `/?offset=X`）並整合 `DateNav` 更新首頁，確保整體 E2E 測試通過 (Green/Refactor) 於 `src/app/page.tsx`
+
+---
+
+## Phase 5: User Story 3 - 系統每日自動執行盤後篩選 (Priority: P1)
+
+**目標**: 透過 GitHub Actions 與 Python 腳本自動抓取資料、套用老余三問邏輯並更新 Supabase。
+**獨立測試**: 執行排程腳本整合測試能正確觸發爬蟲，遇錯誤能重試 3 次，並成功寫入狀態與結果至資料庫。
+
+- [x] T018 [US3] 垂直切片一：實作「老余三問」核心技術分析邏輯，並撰寫獨立測試驗證型態特徵 (Red/Green/Refactor) 於 `scripts/automation/logic.py` 與 `scripts/tests/unit/test_logic.py`
+- [x] T019 [US3] 垂直切片二：實作台美股爬蟲模組與狀態寫入邏輯（含重試、休市處理），並撰寫整合測試（僅 Mock 外部 API，不 Mock 內部實作） (Red/Green/Refactor) 於 `scripts/automation/screener.py` 與 `scripts/tests/unit/test_screener.py`
+- [x] T020 [US3] 垂直切片三：實作排程主程式流程 (`run_automation_flow`) 與舊資料清理，搭配端到端整合測試 (Red/Green/Refactor) 於 `scripts/tests/integration/test_automation_flow.py`
+- [x] T021 [US3] 前端實作狀態顯示元件（區分台股與美股不同狀態，並確保透過 Hook 獲取最新 status），包含對應之單元與 E2E 測試更新於 `src/app/page.tsx`
+- [x] T022 [US3] 建立 GitHub Actions workflow 排程（設定 UTC cron `0 7 * * *`）於 `.github/workflows/daily-screener.yml`
+- [x] T023 [US3] 支援透過 `TARGET_DATE` 環境變數覆寫爬蟲腳本之執行日期，以利假日手動測試與回測 於 `scripts/automation/screener.py`
+
+---
+
+## Phase 6: 動態獲取股票清單 (User Story 4 / FR-011)
+
+**目標**: 系統能從外部 API 動態獲取最新股票清單，並套用價量前置過濾，以優化執行效能。
+**獨立測試**: 獨立測試抓取函式是否能傳回長度大於 0 的代碼陣列，且符合篩選條件。
+
+- [x] T024 [US4] 垂直切片一：實作台股動態獲取與前置過濾機制，並撰寫符合 TDD 的整合測試驗證 (Red/Green/Refactor) 於 `scripts/automation/screener.py`
+- [x] T025 [US4] 垂直切片二：實作美股從 Wikipedia 獲取清單並透過 yfinance 批量下載 4 年歷史資料與前置過濾，搭配測試驗證 (Red/Green/Refactor) 於 `scripts/automation/screener.py`
+
+---
+
+## Phase 7: 資料來源遷移 — FinMind → TWSE OpenAPI + yfinance (FR-011)
+
+**目標**: 將台股資料來源從已無法免費使用的 FinMind API 遷移至 TWSE OpenAPI + yfinance，確保所有既有測試通過且符合 FR-004（200 根日 K + 200 根週 K）與 FR-011（動態清單 + 前置過濾）需求。
+**獨立測試**: 遷移後執行完整測試套件（unit + integration），所有測試通過。
+
+**遷移背景**: FinMind 免費 tier 已不允許不帶 `data_id` 的全表查詢（回傳 400: `"Please update your user level"`）。改用 TWSE OpenAPI `STOCK_DAY_ALL`（免費、無 token、穩定）取得動態清單，yfinance `{code}.TW` 取得個股歷史 OHLC（需涵蓋至少 200 週 ≈ 4 年，以同時滿足 200 根日 K 與 200 根週 K）。
+
+- [x] T026 重構 `get_twse_symbols()` 從 FinMind API 遷移至 TWSE OpenAPI `STOCK_DAY_ALL`，實作成交量前置過濾（>= 1000 張 = 1,000,000 股），回傳 `(symbols: list[str], name_map: dict[str, str])` 以保留股票名稱映射 於 `scripts/automation/screener.py`
+- [x] T027 重構 `fetch_single_twse()` 從 FinMind API 遷移至 yfinance `{code}.TW`，取得歷史 OHLC 並轉換為標準格式 於 `scripts/automation/screener.py`
+- [x] T028 更新 `fetch_and_screen_twse()` 以整合新的 `get_twse_symbols()` 回傳格式（含 name_map），確保寫入 Supabase 時 `name` 欄位為中文股票名稱 於 `scripts/automation/screener.py`
+- [x] T029 更新單元測試以對應新資料來源的 Mock 結構（TWSE OpenAPI JSON 格式、yfinance DataFrame 格式），確保所有 unit test 通過 於 `scripts/tests/unit/test_screener.py`
+- [x] T030 更新整合測試以對應新的 `get_twse_symbols` 回傳格式與 `fetch_single_twse` Mock，確保 integration test 通過 於 `scripts/tests/integration/test_automation_flow.py`
+- [x] T031 從 `scripts/automation/requirements.txt` 移除 FinMind 依賴，執行 `pip install -r requirements.txt` 驗證乾淨安裝
+- [x] T032 以 `TARGET_DATE` 指定最近一個交易日，手動執行 `screener.py` 驗證端到端流程正常完成
+
+---
+
+## Phase 8: Polish & Cross-Cutting Concerns
+
+**目標**: 整體效能優化、文件完善
+
+- `[x]` T033 [P] 補充專案 README.md，包含本機啟動步驟與部署說明
+- `[x]` T034 確保 Next.js SSR/ISR 設定生效，檢查效能指標並消除 Waterfall 請求於 `src/app/page.tsx`
+
+---
+
+## Dependencies & Execution Order
+
+### Phase Dependencies
+
+- **Setup (Phase 1)**: 無依賴，可立即開始
+- **Foundational (Phase 2)**: 依賴 Setup 完成，阻擋所有使用者故事
+- **User Stories (Phase 3+)**: 依賴 Foundational 完成後即可進行
+- **Migration (Phase 7)**: 依賴 Phase 5/6 完成，必須在 Polish 前完成
+- **Polish (Final Phase)**: 依賴所有使用者故事與遷移完成
+
+### User Story Dependencies
+
+- **User Story 1 (P1)**: Foundational 完成後即可開始，無其他依賴
+- **User Story 2 (P2)**: 依賴 US1 的基礎，依循 TDD 確保不破壞既有功能
+- **User Story 3 (P1)**: 腳本開發可與前端平行，依循 TDD 確保各自穩健
+
+### Parallel Opportunities & TDD Workflow
+
+- 嚴格遵守 **TDD Vertical Slices**: 每個小節 (Red) -> (Green) 必須循序進行，不應在未通過測試前撰寫下一段實作。
+- Phase 1 & 2 內的設定任務可由不同成員平行處理。
+- Foundational 完成後，US1 (前端 UI) 與 US3 (爬蟲腳本) 的 TDD 循環可完全由不同成員平行開發。
+- Phase 7 Migration 的 T026-T028 為同一檔案的連續修改，必須循序執行；T029-T030 測試更新可在實作完成後平行進行。

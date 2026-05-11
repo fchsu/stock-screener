@@ -12,18 +12,19 @@
 ## 技術背景
 
 **語言/版本**: 前端使用 TypeScript (Next.js v16)，自動化腳本使用 Python 3.11+
-**主要依賴**: React v19, Tailwind CSS, Zustand, @tanstack/react-query, shadcn-ui, date-fns, yfinance, FinMind, pandas  
-**儲存方案**: Supabase (PostgreSQL 搭配資料列層級安全性 RLS)  
-**測試框架**: Mock Service Worker (MSW), Vitest, Playwright (前端), GitHub Actions (排程)  
+**主要依賴**: React v19, Tailwind CSS, @tanstack/react-query, shadcn-ui, date-fns, yfinance, FinMind, pandas, tenacity  
+**儲存方案**: Supabase (PostgreSQL 搭配資料列層級安全性 RLS 與日期查詢索引)  
+**測試框架**: Mock Service Worker (MSW), Vitest, Playwright (前端), pytest (後端腳本整合測試), GitHub Actions (排程)  
 **部署平台**: Vercel (前端), GitHub Actions (後端腳本)  
 **專案類型**: 網頁應用程式 + 自動化資料管線  
+**環境變數**: 支援 `TARGET_DATE` 以指定爬蟲腳本之虛擬執行日期（預設為當日）。
 **效能目標**: 頁面載入與切換小於 3 秒 (運用 Next.js 快取與伺服器元件)  
 **限制條件**: 零成本營運 (利用 Supabase, Vercel, GitHub Actions 免費額度)，嚴格執行 TDD  
 **規模/範圍**: 個人使用，極低的資料庫讀寫量 (最多儲存/查詢近 5 天的資料)
 
 ## 專案憲法檢查
 
-*閘門：必須在進入開發前通過檢查。*
+_閘門：必須在進入開發前通過檢查。_
 
 - **1. 高程式碼品質**: 通過 (設計採用模組化 Next.js 元件與分離的 Python 計算腳本)
 - **2. TDD**: 通過 (前端配置 Vitest + MSW，依賴 Spec 的 User Story)
@@ -54,33 +55,33 @@ specs/001-daily-screener/
 ### 原始碼 (儲存庫根目錄)
 
 ```text
-frontend/
-├── src/
-│   ├── app/                # Next.js App Router (頁面與佈局)
-│   ├── components/         # shadcn-ui 與客製化 React 元件
-│   ├── lib/                # 工具函式 (date-fns, Supabase client), 狀態管理 (Zustand)
-│   └── services/           # 資料提取 (react-query 查詢)
-├── tests/
-│   ├── e2e/                # Playwright 端對端測試
-│   └── unit/               # Vitest + MSW 測試輔助
+# 專案根目錄即 Next.js 根目錄
+src/
+├── app/                    # Next.js App Router (頁面與佈局)
+├── components/             # shadcn-ui 與客製化 React 元件
+├── lib/                    # 工具函式 (date-fns, Supabase client)
+└── services/               # 資料提取 (react-query 查詢)
+tests/
+├── e2e/                    # Playwright 端對端測試
+└── unit/                   # Vitest + MSW 測試輔助
 
 scripts/
 └── automation/
     ├── screener.py         # 抓取 FinMind/yfinance 資料的 Python 腳本
     ├── logic.py            # 老余三問技術分析邏輯
     └── requirements.txt    # Python 依賴清單
-    
+
 .github/
 └── workflows/
     └── daily-screener.yml  # GitHub Actions 排程定義
 ```
 
-**結構決策**: 採用分離的前端與腳本資料夾架構 (Frontend + Automation Script)。前端處理介面展示與狀態切換，腳本處理厚重的資料抓取與運算，寫入共用的 Supabase 資料庫。
+**結構決策**: 專案根目錄直接作為 Next.js 根目錄，避免 `frontend/` 子目錄造成雙層 git 的問題。自動化腳本放在 `scripts/` 目錄，前端處理介面展示與狀態切換，腳本處理資料抓取與運算，寫入共用的 Supabase 資料庫。
 
 ## 複雜度追蹤
 
 > **僅在專案憲法檢查有例外狀況需解釋時填寫**
 
 | 違規項目 | 為什麼需要 | 較簡單的替代方案為何被拒絕 |
-|-----------|------------|-------------------------------------|
-| 無違規 | N/A | N/A |
+| -------- | ---------- | -------------------------- |
+| 無違規   | N/A        | N/A                        |
