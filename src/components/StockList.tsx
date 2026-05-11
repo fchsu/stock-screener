@@ -47,10 +47,46 @@ export default function StockList({ date, initialData }: { date: string; initial
         )}
 
         {result.status === 'completed' && result.assets && result.assets.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {result.assets.map((stock) => (
-              <StockCard key={stock.symbol} stock={stock} />
-            ))}
+          <div className="space-y-6">
+            {/* 嚴格過濾 (老余三問) */}
+            <div>
+              <h3 className="mb-3 text-lg font-semibold text-gray-800 dark:text-gray-200">
+                🎯 嚴格過濾 (符合老余三問)
+              </h3>
+              {result.assets.filter(s => s.matchLevel === 'strict' || !s.matchLevel).length > 0 ? (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {result.assets
+                    .filter(s => s.matchLevel === 'strict' || !s.matchLevel)
+                    .map((stock) => (
+                      <StockCard key={stock.symbol} stock={stock} />
+                    ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-gray-300 p-4 text-center text-sm text-gray-500 dark:border-gray-700">
+                  無完全符合的標的
+                </div>
+              )}
+            </div>
+
+            {/* 慣性過濾 (放寬條件) */}
+            <div>
+              <h3 className="mb-3 text-lg font-semibold text-gray-800 dark:text-gray-200">
+                🌊 慣性過濾 (守住邊界與假跌破)
+              </h3>
+              {result.assets.filter(s => s.matchLevel === 'momentum').length > 0 ? (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 opacity-90">
+                  {result.assets
+                    .filter(s => s.matchLevel === 'momentum')
+                    .map((stock) => (
+                      <StockCard key={stock.symbol} stock={stock} />
+                    ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-gray-300 p-4 text-center text-sm text-gray-500 dark:border-gray-700">
+                  無僅符合慣性的標的
+                </div>
+              )}
+            </div>
           </div>
         )}
         

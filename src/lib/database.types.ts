@@ -8,6 +8,7 @@ export interface StockAsset {
   symbol: string
   name: string
   market: MarketType
+  matchLevel: string
   tradingViewUrl: string
 }
 

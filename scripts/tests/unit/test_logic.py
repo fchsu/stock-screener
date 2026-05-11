@@ -62,33 +62,33 @@ def test_evaluate_trend_reversal_criteria_pass():
     # 圖：P1=100, P2=120, P3=80, P4=110, P5=100
     # P2-P3 = 40. P4-P5 = 10. 40*0.25=10 <= 10 <= 30. (Pass)
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
-    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == True
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'strict'
 
 def test_evaluate_trend_reversal_criteria_fail_position_boundary_gap():
     # A=50, B=55. Max=55. (55-50)/55 = 0.09 > 0.05. (Fail)
     weekly_data = create_mock_weekly_data(a_price=50, b_price=55, last_low=48, last_close=52, shadow_ratio=0.6)
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
-    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == False
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'none'
 
 def test_evaluate_trend_reversal_criteria_fail_momentum_not_break_down():
     # Last Low = 51 (>= Boundary Min 50). 沒有跌破關鍵邊界 (Fail)
     weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=51, last_close=52, shadow_ratio=0.6)
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
-    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == False
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'none'
 
 def test_evaluate_trend_reversal_criteria_fail_momentum_close_too_low():
     # Last Close = 49 (< Boundary Min 50). 實體收在邊界下方 (Fail)
     weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=49, shadow_ratio=0.6)
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
-    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == False
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'none'
 
 def test_evaluate_trend_reversal_criteria_fail_pattern_missing_p4():
     weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100, missing_p4=True)
-    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == False
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'momentum'
 
 def test_evaluate_trend_reversal_criteria_fail_pattern_p4_p5_out_of_range():
     weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
     # P4-P5 = 110 - 105 = 5. P2-P3 = 40. 40 * 0.25 = 10. 5 < 10. (Fail)
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=105)
-    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == False
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'momentum'

@@ -114,12 +114,14 @@ def fetch_and_screen_twse():
                     continue
                     
                 weekly_data = convert_to_weekly(df_ticker)
-                if evaluate_trend_reversal_criteria(df_ticker, weekly_data):
+                match_level = evaluate_trend_reversal_criteria(df_ticker, weekly_data)
+                if match_level in ('strict', 'momentum'):
                     results.append({
                         "symbol": ticker,
                         "name": name_map.get(symbol, symbol),
                         "market": "TWSE",
-                        "tradingViewUrl": f"https://tw.tradingview.com/chart/eEagIIPe/?symbol={symbol}"
+                        "tradingViewUrl": f"https://tw.tradingview.com/chart/eEagIIPe/?symbol=TWSE%3A{symbol}",
+                        "matchLevel": match_level
                     })
             except Exception as e:
                 print(f"Failed to process TWSE {symbol}: {e}")
@@ -171,13 +173,15 @@ def fetch_and_screen_us():
                     
                 # 滿足條件則進行老余三問篩選
                 weekly_data = convert_to_weekly(df_ticker)
-                if evaluate_trend_reversal_criteria(df_ticker, weekly_data):
+                match_level = evaluate_trend_reversal_criteria(df_ticker, weekly_data)
+                if match_level in ('strict', 'momentum'):
                     # yfinance batch download 無法直接取得 shortName，暫以 ticker 代替
                     results.append({
                         "symbol": ticker,
                         "name": ticker,
                         "market": "US",
-                        "tradingViewUrl": f"https://tw.tradingview.com/chart/eEagIIPe/?symbol={ticker}"
+                        "tradingViewUrl": f"https://tw.tradingview.com/chart/eEagIIPe/?symbol={ticker}",
+                        "matchLevel": match_level
                     })
             except Exception as e:
                 print(f"Failed to process US {ticker}: {e}")

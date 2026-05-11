@@ -82,7 +82,7 @@ def test_fetch_and_screen_us(mock_get, mock_is_open, mock_read_html, mock_downlo
         # Let's just return True for everything, and let the assertions fail? No.
         # MSFT is filtered out BEFORE evaluate is called because volume < 1,000,000.
         # So evaluate is ONLY called for AAPL.
-        return True
+        return 'strict'
     mock_evaluate.side_effect = side_effect
     
     # Mock requests.get to prevent real network call
