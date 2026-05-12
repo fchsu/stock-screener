@@ -1,7 +1,7 @@
 -- Supabase Schema 契約: 001-daily-screener
 
 -- 定義市場別的列舉型別 (Enum)
-CREATE TYPE market_type AS ENUM ('TWSE', 'NASDAQ', 'US');
+CREATE TYPE market_type AS ENUM ('TWSE', 'NASDAQ', 'NYSE', 'S&P 500', 'US');
 
 -- 定義篩選狀態的列舉型別
 CREATE TYPE screening_status AS ENUM ('fetching', 'completed', 'failed', 'closed');

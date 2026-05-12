@@ -1,7 +1,7 @@
 // 對應 contracts/supabase-schema.sql 的型別定義
 // 若之後透過 supabase gen types 自動產生，可直接替換此檔
 
-export type MarketType = 'TWSE' | 'NASDAQ' | 'US'
+export type MarketType = 'TWSE' | 'NASDAQ' | 'NYSE' | 'S&P 500' | 'US'
 export type ScreeningStatus = 'fetching' | 'completed' | 'failed' | 'closed'
 
 export interface StockAsset {
