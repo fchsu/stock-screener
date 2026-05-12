@@ -19,7 +19,7 @@ export default function StockList({ date, initialData }: { date: string; initial
   }
 
   const twseResult = data.find((item) => item.market === 'TWSE')
-  const nasdaqResult = data.find((item) => item.market === 'NASDAQ' || item.market === 'US')
+  const usResult = data.find((item) => ['NASDAQ', 'US', 'S&P 500'].includes(item.market))
 
   const renderMarketSection = (title: string, result: typeof twseResult) => {
     if (!result) return null
@@ -102,7 +102,7 @@ export default function StockList({ date, initialData }: { date: string; initial
   return (
     <div className="space-y-8">
       {renderMarketSection('台股', twseResult)}
-      {renderMarketSection('美股', nasdaqResult)}
+      {renderMarketSection('美股', usResult)}
     </div>
   )
 }

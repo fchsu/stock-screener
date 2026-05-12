@@ -153,6 +153,7 @@ def fetch_and_screen_us():
         if data.empty:
             return "closed"
             
+        stats = {"total": len(tickers), "pre_filter": 0, "momentum": 0, "strict": 0}
         for ticker in tickers:
             try:
                 # 從 MultiIndex 取出單一股票的 OHLCV
@@ -171,21 +172,41 @@ def fetch_and_screen_us():
                 if close_price < 10 or volume < 1000000:
                     continue
                     
+                stats["pre_filter"] += 1
                 # 滿足條件則進行老余三問篩選
                 weekly_data = convert_to_weekly(df_ticker)
                 match_level = evaluate_trend_reversal_criteria(df_ticker, weekly_data)
+                
                 if match_level in ('strict', 'momentum'):
-                    # yfinance batch download 無法直接取得 shortName，暫以 ticker 代替
+                    if match_level == 'strict': stats["strict"] += 1
+                    else: stats["momentum"] += 1
+                    
+                    # 取得實際交易所資訊以符合 TradingView 分類
+                    ticker_obj = yf.Ticker(ticker)
+                    try:
+                        info = ticker_obj.info
+                        if info is None: info = {}
+                    except Exception:
+                        info = {}
+                        
+                    exchange = info.get('exchange', 'US')
+                    # 將 yfinance 的交易所名稱對應到 TradingView 格式
+                    tv_exchange = exchange
+                    if exchange == 'NMS': tv_exchange = 'NASDAQ'
+                    elif exchange == 'NYQ': tv_exchange = 'NYSE'
+                    
                     results.append({
                         "symbol": ticker,
-                        "name": ticker,
-                        "market": "US",
-                        "tradingViewUrl": f"https://tw.tradingview.com/chart/eEagIIPe/?symbol={ticker}",
+                        "name": info.get('shortName', ticker),
+                        "market": tv_exchange,
+                        "tradingViewUrl": f"https://tw.tradingview.com/chart/eEagIIPe/?symbol={tv_exchange}:{ticker.replace('-', '.')}",
                         "matchLevel": match_level
                     })
             except Exception as e:
                 print(f"Failed to process US {ticker}: {e}")
-                
+        
+        print(f"US Screening Summary: Total={stats['total']}, Passed Pre-filter={stats['pre_filter']}, Momentum={stats['momentum']}, Strict={stats['strict']}")
+            
     except Exception as e:
         print(f"Failed to fetch US bulk data: {e}")
             
@@ -212,7 +233,7 @@ def run_automation_flow():
     if supabase:
         supabase.table("screening_results").upsert([
             {"date": today, "market": "TWSE", "status": "fetching", "assets": []},
-            {"date": today, "market": "NASDAQ", "status": "fetching", "assets": []}
+            {"date": today, "market": "S&P 500", "status": "fetching", "assets": []}
         ], on_conflict="date,market").execute()
         
     try:
@@ -232,21 +253,21 @@ def run_automation_flow():
             else:
                 print(f"TWSE: status is {twse_status}")
             
-        print(f"[{today}] Fetching NASDAQ data...")
+        print(f"[{today}] Fetching S&P 500 data...")
         us_results = fetch_and_screen_us()
         if supabase:
             us_status = us_results if isinstance(us_results, str) else "completed"
             us_assets = [] if isinstance(us_results, str) else us_results
             supabase.table("screening_results").upsert({
                 "date": today,
-                "market": "NASDAQ",
+                "market": "S&P 500",
                 "status": us_status,
                 "assets": us_assets
             }, on_conflict="date,market").execute()
             if isinstance(us_results, list):
-                print(f"NASDAQ: successfully screened {len(us_results)} stocks: {[r['symbol'] for r in us_results]}")
+                print(f"S&P 500: successfully screened {len(us_results)} stocks: {[r['symbol'] for r in us_results]}")
             else:
-                print(f"NASDAQ: status is {us_status}")
+                print(f"S&P 500: status is {us_status}")
             
         # 執行舊資料清理
         cleanup_old_data()
@@ -257,7 +278,7 @@ def run_automation_flow():
             # For this simple script, we'll mark any pending as failed
             supabase.table("screening_results").upsert([
                 {"date": today, "market": "TWSE", "status": "failed", "assets": []},
-                {"date": today, "market": "NASDAQ", "status": "failed", "assets": []}
+                {"date": today, "market": "S&P 500", "status": "failed", "assets": []}
             ], on_conflict="date,market").execute()
         raise e
 
