@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 
 from automation.logic import evaluate_trend_reversal_criteria
 
+# 停用時區快取，防止多執行緒下載時 SQLite 鎖定 (database is locked)
+yf.set_tz_cache_location(None)
 load_dotenv()
 
 # 允許透過環境變數指定執行日期（用於假日測試或歷史回測）
