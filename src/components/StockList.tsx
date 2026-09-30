@@ -110,7 +110,11 @@ export default function StockList({ date, initialData }: { date: string; initial
 function StockCard({ stock }: { stock: StockAsset }) {
   // 確保相容舊資料：若無 tradingViewUrl 則動態生成
   const code = stock.market === 'TWSE' ? stock.symbol.split('.')[0] : stock.symbol
-  let tvUrl = stock.tradingViewUrl
+  const tvUrl =
+    stock.tradingViewUrl ||
+    (stock.market === 'TWSE'
+      ? `https://tw.tradingview.com/chart/eEagIIPe/?symbol=TWSE%3A${code}`
+      : `https://tw.tradingview.com/chart/eEagIIPe/?symbol=${stock.market || 'US'}:${code}`)
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
@@ -121,7 +125,7 @@ function StockCard({ stock }: { stock: StockAsset }) {
         </span>
       </div>
       <a
-        href={stock.tradingViewUrl}
+        href={tvUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="mt-4 inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
