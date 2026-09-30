@@ -61,25 +61,35 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
     key_boundary_min = min(a_price, b_price)
         
     # --- 2. 慣性 (Momentum) ---
-    last_week = weekly_data.iloc[-1]
-    w_open = last_week['Open']
-    w_close = last_week['Close']
-    w_high = last_week['High']
-    w_low = last_week['Low']
-    
-    if w_high == w_low:
-        return 'none'
-        
-    body_bottom = min(w_open, w_close)
-    lower_shadow = body_bottom - w_low
-    total_range = w_high - w_low
-    
-    # 原有條件：長下影線
-    if (lower_shadow / total_range) <= 0.5:
-        return 'none'
-        
-    # 追加條件：週線最低點必須跌破關鍵邊界，且實體底部必須站穩在關鍵邊界之上
-    if w_low >= key_boundary_min or body_bottom < key_boundary_min:
+    # 檢查當週 K 棒 (iloc[-1]) 或前一週已收定週 K (iloc[-2])，避免週中因當週尚未走完而錯失剛成形的型態
+    candidate_weeks = [weekly_data.iloc[-1]]
+    if len(weekly_data) >= 3:
+        candidate_weeks.append(weekly_data.iloc[-2])
+
+    def check_momentum(week_bar) -> bool:
+        w_open = week_bar['Open']
+        w_close = week_bar['Close']
+        w_high = week_bar['High']
+        w_low = week_bar['Low']
+
+        if w_high == w_low:
+            return False
+
+        body_bottom = min(w_open, w_close)
+        lower_shadow = body_bottom - w_low
+        total_range = w_high - w_low
+
+        # 條件 2-1: 長下影線 (下影線長度大於總振幅的一半)
+        if (lower_shadow / total_range) <= 0.5:
+            return False
+
+        # 條件 2-2: 週線最低點跌破關鍵邊界，且實體底部站穩在關鍵邊界之上
+        if w_low >= key_boundary_min or body_bottom < key_boundary_min:
+            return False
+
+        return True
+
+    if not any(check_momentum(w) for w in candidate_weeks):
         return 'none'
         
     # --- 3. 圖 (Pattern - 破底翻) ---

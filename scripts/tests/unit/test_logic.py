@@ -92,3 +92,13 @@ def test_evaluate_trend_reversal_criteria_fail_pattern_p4_p5_out_of_range():
     # P4-P5 = 110 - 105 = 5. P2-P3 = 40. 40 * 0.25 = 10. 5 < 10. (Fail)
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=105)
     assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'momentum'
+
+def test_evaluate_trend_reversal_criteria_pass_on_previous_week_completed_bar():
+    # 上週 (iloc[-2]) 符合條件，而當週 (iloc[-1]) 剛開盤無下影線且未跌破
+    weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
+    # 追加一根尚未成形的當週 K 棒 (開高低收均在 55，無下影線且在邊界之上)
+    incomplete_week = pd.DataFrame([{'Open': 55, 'High': 56, 'Low': 55, 'Close': 55}])
+    weekly_data_extended = pd.concat([weekly_data, incomplete_week], ignore_index=True)
+
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data_extended) == 'strict'
