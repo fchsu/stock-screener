@@ -115,7 +115,8 @@ def fetch_and_screen_twse():
             print("[TWSE ERROR] yfinance bulk download returned empty dataset!", flush=True)
             return results
 
-        print(f"[TWSE Step 2/4] Successfully downloaded historical matrix: shape={data.shape}", flush=True)
+        latest_market_date = data.index[-1].strftime("%Y-%m-%d") if not data.empty else ""
+        print(f"[TWSE Step 2/4] Note: Latest market trading date available in data is {latest_market_date}.", flush=True)
         print(f"[TWSE Step 3/4] Screening stocks against 'Old Yu's Three Questions' criteria...", flush=True)
         stats = {"total": len(symbols), "valid_history": 0, "momentum": 0, "strict": 0}
         for symbol in symbols:
@@ -146,7 +147,8 @@ def fetch_and_screen_twse():
                         "name": stock_name,
                         "market": "TWSE",
                         "tradingViewUrl": f"https://tw.tradingview.com/chart/eEagIIPe/?symbol=TWSE%3A{symbol}",
-                        "matchLevel": match_level
+                        "matchLevel": match_level,
+                        "tradingDate": latest_market_date
                     })
             except Exception as e:
                 print(f"[TWSE Warning] Failed to process {symbol}: {e}", flush=True)
@@ -185,6 +187,8 @@ def fetch_and_screen_us():
             print("[US ERROR] yfinance bulk download returned empty dataset!", flush=True)
             return results
             
+        latest_market_date = data.index[-1].strftime("%Y-%m-%d") if not data.empty else ""
+        print(f"[US Step 2/4] Note: Latest market trading date available in data is {latest_market_date}.", flush=True)
         print(f"[US Step 2/4] Successfully downloaded historical matrix: shape={data.shape}", flush=True)
         print(f"[US Step 3/4] Screening stocks against 'Old Yu's Three Questions' criteria...", flush=True)
         stats = {"total": len(tickers), "valid_history": 0, "pre_filter": 0, "momentum": 0, "strict": 0}
@@ -237,7 +241,8 @@ def fetch_and_screen_us():
                         "name": short_name,
                         "market": tv_exchange,
                         "tradingViewUrl": f"https://tw.tradingview.com/chart/eEagIIPe/?symbol={tv_exchange}:{ticker.replace('-', '.')}",
-                        "matchLevel": match_level
+                        "matchLevel": match_level,
+                        "tradingDate": latest_market_date
                     })
             except Exception as e:
                 print(f"[US Warning] Failed to process {ticker}: {e}", flush=True)

@@ -60,4 +60,39 @@ describe('StockList', () => {
     expect(screen.getByText('NVIDIA Corporation')).toBeInTheDocument()
     expect(screen.getByText('NVDA')).toBeInTheDocument()
   })
+
+  it('should display tradingDate when provided', () => {
+    const resultsWithTradingDate = [
+      {
+        id: 'mock-uuid-1',
+        date: '2026-10-01',
+        market: 'TWSE' as const,
+        status: 'completed' as const,
+        assets: [
+          {
+            symbol: '2014.TW',
+            name: '中鴻',
+            market: 'TWSE' as const,
+            matchLevel: 'momentum',
+            tradingViewUrl: 'https://tw.tradingview.com/chart/eEagIIPe/?symbol=TWSE:2014',
+            tradingDate: '2026-10-01',
+          },
+        ],
+        updated_at: '2026-10-01T07:00:00Z',
+      },
+    ]
+
+    vi.mocked(queries.useScreeningResult).mockReturnValue({
+      data: resultsWithTradingDate,
+      isLoading: false,
+      isError: false,
+      error: null,
+      isSuccess: true,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    render(<StockList date="2026-10-01" />)
+
+    expect(screen.getByText('資料基準日：2026-10-01')).toBeInTheDocument()
+  })
 })

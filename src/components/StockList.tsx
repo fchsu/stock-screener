@@ -3,7 +3,13 @@
 import { useScreeningResult } from '@/services/queries'
 import type { StockAsset, ScreeningResult } from '@/lib/types'
 
-export default function StockList({ date, initialData }: { date: string; initialData?: ScreeningResult[] }) {
+export default function StockList({
+  date,
+  initialData,
+}: {
+  date: string
+  initialData?: ScreeningResult[]
+}) {
   const { data, isLoading, isError } = useScreeningResult(date, initialData)
 
   if (isLoading) {
@@ -27,19 +33,19 @@ export default function StockList({ date, initialData }: { date: string; initial
     return (
       <section>
         <h2 className="mb-4 text-2xl font-bold">{title}</h2>
-        
+
         {result.status === 'fetching' && (
           <div className="rounded-lg bg-blue-50 p-4 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
             資料抓取中...
           </div>
         )}
-        
+
         {result.status === 'failed' && (
           <div className="rounded-lg bg-red-50 p-4 text-red-700 dark:bg-red-900/30 dark:text-red-300">
             抓取失敗
           </div>
         )}
-        
+
         {result.status === 'closed' && (
           <div className="rounded-lg bg-yellow-50 p-4 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">
             今日休市
@@ -53,10 +59,11 @@ export default function StockList({ date, initialData }: { date: string; initial
               <h3 className="mb-3 text-lg font-semibold text-gray-800 dark:text-gray-200">
                 🎯 嚴格過濾 (符合老余三問)
               </h3>
-              {result.assets.filter(s => s.matchLevel === 'strict' || !s.matchLevel).length > 0 ? (
+              {result.assets.filter((s) => s.matchLevel === 'strict' || !s.matchLevel).length >
+              0 ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {result.assets
-                    .filter(s => s.matchLevel === 'strict' || !s.matchLevel)
+                    .filter((s) => s.matchLevel === 'strict' || !s.matchLevel)
                     .map((stock) => (
                       <StockCard key={stock.symbol} stock={stock} />
                     ))}
@@ -73,10 +80,10 @@ export default function StockList({ date, initialData }: { date: string; initial
               <h3 className="mb-3 text-lg font-semibold text-gray-800 dark:text-gray-200">
                 🌊 慣性過濾 (守住邊界與假跌破)
               </h3>
-              {result.assets.filter(s => s.matchLevel === 'momentum').length > 0 ? (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 opacity-90">
+              {result.assets.filter((s) => s.matchLevel === 'momentum').length > 0 ? (
+                <div className="grid gap-4 opacity-90 md:grid-cols-2 lg:grid-cols-3">
                   {result.assets
-                    .filter(s => s.matchLevel === 'momentum')
+                    .filter((s) => s.matchLevel === 'momentum')
                     .map((stock) => (
                       <StockCard key={stock.symbol} stock={stock} />
                     ))}
@@ -89,7 +96,7 @@ export default function StockList({ date, initialData }: { date: string; initial
             </div>
           </div>
         )}
-        
+
         {result.status === 'completed' && (!result.assets || result.assets.length === 0) && (
           <div className="rounded-lg bg-gray-50 p-4 text-gray-500 dark:bg-gray-800/50 dark:text-gray-400">
             無符合條件的股票
@@ -117,12 +124,19 @@ function StockCard({ stock }: { stock: StockAsset }) {
       : `https://tw.tradingview.com/chart/eEagIIPe/?symbol=${stock.market || 'US'}:${code}`)
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold">{stock.name}</h3>
-        <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-          {stock.symbol}
-        </span>
+    <div className="flex flex-col justify-between rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
+      <div>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-bold">{stock.name}</h3>
+          <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+            {stock.symbol}
+          </span>
+        </div>
+        {stock.tradingDate && (
+          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            資料基準日：{stock.tradingDate}
+          </div>
+        )}
       </div>
       <a
         href={tvUrl}

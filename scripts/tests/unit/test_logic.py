@@ -102,3 +102,18 @@ def test_evaluate_trend_reversal_criteria_pass_on_previous_week_completed_bar():
 
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
     assert evaluate_trend_reversal_criteria(daily_data, weekly_data_extended) == 'strict'
+
+def test_evaluate_trend_reversal_criteria_fail_if_current_week_body_broken():
+    # 上週 (iloc[-2]) 假跌破，但當週 (iloc[-1]) 實體收在 48，已真正跌破關鍵邊界 50
+    weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
+    broken_week = pd.DataFrame([{'Open': 49, 'High': 49.5, 'Low': 47, 'Close': 48}])
+    weekly_data_broken = pd.concat([weekly_data, broken_week], ignore_index=True)
+
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data_broken) == 'none'
+
+def test_evaluate_trend_reversal_criteria_fail_if_p5_lower_than_p3():
+    weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
+    # P3=80, P5=78 (右腳跌破 P3，不可判定為 strict 破底翻)
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=78)
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'momentum'

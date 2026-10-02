@@ -10,6 +10,7 @@ export interface StockAsset {
   market: MarketType
   matchLevel: string
   tradingViewUrl: string
+  tradingDate?: string
 }
 
 export interface ScreeningResult {

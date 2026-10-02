@@ -118,3 +118,4 @@ def test_fetch_and_screen_us(mock_get, mock_is_open, mock_read_html, mock_downlo
     # 應該只有 AAPL 會通過過濾且通過所有整合邏輯判斷
     assert len(results) == 1
     assert results[0]['symbol'] == 'AAPL'
+    assert results[0]['tradingDate'] == passing_data.index[-1].strftime('%Y-%m-%d')

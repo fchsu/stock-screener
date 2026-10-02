@@ -89,6 +89,12 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
 
         return True
 
+    # 當週 (iloc[-1]) 實體底部若已跌破關鍵邊界，代表支撐已失守 (假跌破轉為真破位)，直接淘汰
+    current_week = weekly_data.iloc[-1]
+    current_body_bottom = min(current_week['Open'], current_week['Close'])
+    if current_body_bottom < key_boundary_min:
+        return 'none'
+
     if not any(check_momentum(w) for w in candidate_weeks):
         return 'none'
         
@@ -138,6 +144,10 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
     # P4 取最高點
     p4_idx, p4 = max(valid_p4_candidates, key=lambda x: x[1])
     
+    # 條件 3-0: 右腳 P5 必須高於或等於破底點 P3 (破底翻右腳不可再創新低破底)
+    if p5 < p3:
+        return 'momentum'
+
     # 條件 3-1: P5 與 P1 的價格落差需在 3% 以內
     p1_p5_diff_ratio = abs(p5 - p1) / p1
     if abs(p5 - p1) / p1 > 0.03:
@@ -152,4 +162,11 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
     if (p4 - p5) < p2_p3_drop * 0.25 or (p4 - p5) > p2_p3_drop * 0.75:
         return 'momentum'
         
+    # 條件 3-3: 止跌確認 (若 P5 為最新一根日 K，不可為實體大黑棒收在當日最低點)
+    last_bar = recent.iloc[-1]
+    bar_range = last_bar['High'] - last_bar['Low']
+    if bar_range > 0 and last_bar['Close'] < last_bar['Open']:
+        if (last_bar['Close'] - last_bar['Low']) / bar_range < 0.10:
+            return 'momentum'
+
     return 'strict'
