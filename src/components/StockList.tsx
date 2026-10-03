@@ -2,6 +2,7 @@
 
 import { useScreeningResult } from '@/services/queries'
 import type { StockAsset, ScreeningResult } from '@/lib/types'
+import { getTaiwanDate } from '@/lib/utils'
 
 export default function StockList({
   date,
@@ -21,7 +22,46 @@ export default function StockList({
   }
 
   if (!data || data.length === 0) {
-    return <div className="p-4 text-center text-gray-500">當日無符合條件的股票。</div>
+    const isToday = date === getTaiwanDate()
+
+    if (isToday) {
+      return (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50/50 p-8 text-center dark:border-gray-800 dark:bg-gray-900/30">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </div>
+          <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
+            本日尚未執行篩選
+          </h3>
+          <p className="mt-2 max-w-md text-sm text-gray-600 dark:text-gray-400">
+            每日篩選固定於台股收盤後{' '}
+            <span className="font-semibold text-gray-800 dark:text-gray-200">
+              15:15（台灣時間）
+            </span>{' '}
+            自動執行。執行完畢後將即時在此更新標的。
+          </p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-gray-500 dark:border-gray-800">
+        該日無篩選紀錄（可能為假日休市或未排程執行）。
+      </div>
+    )
   }
 
   const twseResult = data.find((item) => item.market === 'TWSE')

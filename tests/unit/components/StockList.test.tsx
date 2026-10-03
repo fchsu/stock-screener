@@ -95,4 +95,39 @@ describe('StockList', () => {
 
     expect(screen.getByText('資料基準日：2026-10-01')).toBeInTheDocument()
   })
+
+  it('should display pending screening state with schedule info when empty on today', () => {
+    vi.mocked(queries.useScreeningResult).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+      isSuccess: true,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    const todayStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Taipei',
+    }).format(new Date())
+
+    render(<StockList date={todayStr} />)
+
+    expect(screen.getByText('本日尚未執行篩選')).toBeInTheDocument()
+    expect(screen.getByText(/15:15（台灣時間）/)).toBeInTheDocument()
+  })
+
+  it('should display no records message when empty on a past day', () => {
+    vi.mocked(queries.useScreeningResult).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+      isSuccess: true,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    render(<StockList date="2020-01-01" />)
+
+    expect(screen.getByText(/該日無篩選紀錄/)).toBeInTheDocument()
+  })
 })
