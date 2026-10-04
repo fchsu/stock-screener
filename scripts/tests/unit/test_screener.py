@@ -6,6 +6,7 @@ from automation.screener import (
     fetch_and_screen_twse,
     fetch_and_screen_us,
     get_twse_symbols,
+    get_sp1500_symbols,
     is_market_open,
     check_twse_market_open,
     get_us_target_info,
@@ -182,3 +183,29 @@ def test_fetch_and_screen_us(mock_get, mock_get_target_info, mock_check_us, mock
 def test_fetch_and_screen_us_closed(mock_check_us):
     mock_check_us.return_value = False
     assert fetch_and_screen_us() == "closed"
+
+@patch("automation.screener.pd.read_html")
+@patch("automation.screener.requests.get")
+def test_get_sp1500_symbols_success(mock_get, mock_read_html):
+    # 模擬 3 個維基百科頁面回傳不同欄位名 (Symbol, Ticker symbol, Ticker) 與點號代號
+    mock_resp = MagicMock()
+    mock_resp.text = "<html>table</html>"
+    mock_get.return_value = mock_resp
+
+    df1 = pd.DataFrame({"Symbol": ["AAPL", "BRK.B"]})
+    df2 = pd.DataFrame({"Ticker symbol": ["MGY", "NNN"]})
+    df3 = pd.DataFrame({"Ticker": ["WAFD", "AAPL"]})  # 包含重複 AAPL
+
+    mock_read_html.side_effect = [[df1], [df2], [df3]]
+
+    symbols = get_sp1500_symbols()
+    # 應去重、轉換點為連字號 (BRK.B -> BRK-B) 並排序
+    assert symbols == ["AAPL", "BRK-B", "MGY", "NNN", "WAFD"]
+    assert mock_get.call_count == 3
+
+@patch("automation.screener.requests.get")
+def test_get_sp1500_symbols_all_fail(mock_get):
+    mock_get.side_effect = Exception("Wikipedia timeout")
+    symbols = get_sp1500_symbols()
+    assert symbols == []
+

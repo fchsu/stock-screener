@@ -43,59 +43,66 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
     # --- 1. 位置 (Position) ---
     w_lows = weekly_data['Low'].values
     w_highs = weekly_data['High'].values
-    w_swing_highs, w_swing_lows = get_swing_points(w_highs, w_lows, window=3)
+    w_swing_highs, w_swing_lows = get_swing_points(w_highs, w_lows, window=2)
 
     if len(w_swing_lows) < 2:
         return 'none'
-        
-    # A 點是最接近當前的週線 Swing Low，B 點是 A 的前一個
-    w_swing_lows_sorted = sorted(w_swing_lows, key=lambda x: x[0])
-    idx_a, a_price = w_swing_lows_sorted[-1]
-    idx_b, b_price = w_swing_lows_sorted[-2]
 
-    # 判斷 A 與 B 是否在 5% 落差以內，形成關鍵邊界
-    max_ab = max(a_price, b_price)
-    if max_ab == 0 or abs(a_price - b_price) / max_ab > 0.05:
-        return 'none'
-        
-    key_boundary_min = min(a_price, b_price)
-        
-    # --- 2. 慣性 (Momentum) ---
-    # 檢查當週 K 棒 (iloc[-1]) 或前一週已收定週 K (iloc[-2])，避免週中因當週尚未走完而錯失剛成形的型態
+    sorted_sl = sorted(w_swing_lows, key=lambda x: x[0])
+
+    # 候選測試週：當週 (iloc[-1]) 與 上週 (iloc[-2])，涵蓋剛收線與週中觀察
     candidate_weeks = [weekly_data.iloc[-1]]
     if len(weekly_data) >= 3:
         candidate_weeks.append(weekly_data.iloc[-2])
 
-    def check_momentum(week_bar) -> bool:
-        w_open = week_bar['Open']
-        w_close = week_bar['Close']
-        w_high = week_bar['High']
-        w_low = week_bar['Low']
-
-        if w_high == w_low:
-            return False
-
-        body_bottom = min(w_open, w_close)
-        lower_shadow = body_bottom - w_low
-        total_range = w_high - w_low
-
-        # 條件 2-1: 長下影線 (下影線長度大於總振幅的一半)
-        if (lower_shadow / total_range) <= 0.5:
-            return False
-
-        # 條件 2-2: 週線最低點跌破關鍵邊界，且實體底部站穩在關鍵邊界之上
-        if w_low >= key_boundary_min or body_bottom < key_boundary_min:
-            return False
-
-        return True
-
-    # 當週 (iloc[-1]) 實體底部若已跌破關鍵邊界，代表支撐已失守 (假跌破轉為真破位)，直接淘汰
     current_week = weekly_data.iloc[-1]
     current_body_bottom = min(current_week['Open'], current_week['Close'])
-    if current_body_bottom < key_boundary_min:
+
+    # 尋找歷史形成的關鍵邊界 (任意兩點低點差距在 5% 以內，形成有效水平支撐帶)
+    valid_boundaries = []
+    n_sl = len(sorted_sl)
+    for i in range(n_sl - 1, -1, -1):
+        idx_a, price_a = sorted_sl[i]
+        for j in range(i - 1, -1, -1):
+            idx_b, price_b = sorted_sl[j]
+            max_ab = max(price_a, price_b)
+            if max_ab > 0 and abs(price_a - price_b) / max_ab <= 0.05:
+                valid_boundaries.append(min(price_a, price_b))
+
+    if not valid_boundaries:
         return 'none'
 
-    if not any(check_momentum(w) for w in candidate_weeks):
+    valid_boundaries = sorted(list(set(valid_boundaries)), reverse=True)
+
+    # --- 2. 慣性 (Momentum) ---
+    matched_boundary = None
+    for b_level in valid_boundaries:
+        # 當前週實體不可跌破該邊界 (防真破位)
+        if current_body_bottom < b_level:
+            continue
+
+        for w in candidate_weeks:
+            w_open, w_close, w_high, w_low = w['Open'], w['Close'], w['High'], w['Low']
+            if w_high == w_low:
+                continue
+
+            body_bottom = min(w_open, w_close)
+            lower_shadow = body_bottom - w_low
+            total_range = w_high - w_low
+
+            # 條件 2-1: 長下影線 (下影線長度大於總振幅的一半)
+            if (lower_shadow / total_range) <= 0.5:
+                continue
+
+            # 條件 2-2: 週線最低點跌破關鍵邊界，且實體底部站穩在關鍵邊界之上
+            if w_low < b_level and body_bottom >= b_level:
+                matched_boundary = b_level
+                break
+
+        if matched_boundary is not None:
+            break
+
+    if matched_boundary is None:
         return 'none'
         
     # --- 3. 圖 (Pattern - 破底翻) ---

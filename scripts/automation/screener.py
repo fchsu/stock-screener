@@ -208,6 +208,43 @@ def fetch_and_screen_twse():
             
     return results
 
+def get_sp1500_symbols():
+    """從 Wikipedia 抓取 S&P Composite 1500 (S&P 500 + S&P 400 + S&P 600) 成分股清單。"""
+    urls = [
+        ('S&P 500', 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'),
+        ('S&P 400', 'https://en.wikipedia.org/wiki/List_of_S%26P_400_companies'),
+        ('S&P 600', 'https://en.wikipedia.org/wiki/List_of_S%26P_600_companies'),
+    ]
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    all_tickers = []
+    from io import StringIO
+
+    for name, url in urls:
+        try:
+            resp = requests.get(url, headers=headers, timeout=15)
+            resp.raise_for_status()
+            tables = pd.read_html(StringIO(resp.text))
+            for t in tables:
+                for col in ['Symbol', 'Ticker symbol', 'Ticker']:
+                    if col in t.columns:
+                        symbols = t[col].dropna().astype(str).str.strip().tolist()
+                        all_tickers.extend(symbols)
+                        break
+                else:
+                    continue
+                break
+        except Exception as e:
+            print(f"[US Warning] Failed to fetch {name} list: {e}", flush=True)
+
+    if not all_tickers:
+        return []
+
+    # 點換成連字號，去除無效與重複
+    cleaned = sorted(list(set([t.replace('.', '-') for t in all_tickers if t and not t.startswith('—')])))
+    return cleaned
+
 def fetch_and_screen_us():
     target_us_date, is_weekend = get_us_target_info(run_date)
     if not check_us_market_open(target_us_date, is_weekend):
@@ -216,19 +253,13 @@ def fetch_and_screen_us():
         
     results = []
     try:
-        # Fetch S&P 500 symbols from wikipedia
-        print(f"[US Step 1/4] Fetching S&P 500 constituent list from Wikipedia...", flush=True)
-        url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        html = requests.get(url, headers=headers, timeout=15).text
-        from io import StringIO
-        tables = pd.read_html(StringIO(html))
-        df_sp500 = tables[0]
-        tickers = df_sp500['Symbol'].tolist()
-        
-        # Replace dot with hyphen for yfinance
-        tickers = [t.replace('.', '-') for t in tickers]
-        print(f"[US Step 1/4] Retrieved {len(tickers)} S&P 500 constituent tickers.", flush=True)
+        # Fetch S&P Composite 1500 symbols from wikipedia
+        print(f"[US Step 1/4] Fetching S&P Composite 1500 constituent list from Wikipedia...", flush=True)
+        tickers = get_sp1500_symbols()
+        if not tickers:
+            print("[US ERROR] Failed to fetch S&P 1500 constituent tickers!", flush=True)
+            return results
+        print(f"[US Step 1/4] Retrieved {len(tickers)} S&P Composite 1500 constituent tickers.", flush=True)
         
         # 一次性發送併發請求，直接抓取 4 年歷史資料
         print(f"[US Step 2/4] Downloading 4-year history for {len(tickers)} tickers via yfinance...", flush=True)

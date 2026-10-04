@@ -117,3 +117,33 @@ def test_evaluate_trend_reversal_criteria_fail_if_p5_lower_than_p3():
     # P3=80, P5=78 (右腳跌破 P3，不可判定為 strict 破底翻)
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=78)
     assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'momentum'
+
+def test_evaluate_trend_reversal_criteria_pass_non_adjacent_swing_lows():
+    # 測試非相鄰 Swing Lows 配對：中間夾了一個次級低點 (B=65)，但歷史大底 (C=50) 與近期回測 (A=51) 差距 < 5%
+    data = []
+    for _ in range(199):
+        data.append({'Open': 100, 'High': 105, 'Low': 95, 'Close': 100})
+
+    # C 點 (歷史大底: price 50)
+    data[-25] = {'Open': 52, 'High': 55, 'Low': 50, 'Close': 53}
+    data[-26]['Low'] = 65
+    data[-24]['Low'] = 65
+
+    # B 點 (次級低點: price 65，與 50 落差達 23%)
+    data[-15] = {'Open': 67, 'High': 70, 'Low': 65, 'Close': 68}
+    data[-16]['Low'] = 75
+    data[-14]['Low'] = 75
+
+    # A 點 (近期回測低點: price 51)
+    data[-7] = {'Open': 53, 'High': 56, 'Low': 51, 'Close': 54}
+    data[-8]['Low'] = 65
+    data[-6]['Low'] = 65
+
+    # 當週 K 棒 (假跌破 50，收長下影線)
+    # Low=48, Body bottom=52, High=55 -> Shadow=4, Range=7 (4/7 > 0.5)
+    data.append({'Open': 54, 'High': 55, 'Low': 48, 'Close': 52})
+    weekly_data = pd.DataFrame(data)
+
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'strict'
+
