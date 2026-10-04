@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
 import DateNav from '@/components/DateNav'
 
 describe('DateNav', () => {
@@ -11,7 +11,7 @@ describe('DateNav', () => {
     const todayLink = screen.getByRole('link', { name: '當天' })
     expect(todayLink).toHaveAttribute('href', '/')
     expect(todayLink).toHaveClass('bg-primary') // default variant has bg-primary
-    
+
     // 前1天
     const day1Link = screen.getByRole('link', { name: '前1天' })
     expect(day1Link).toHaveAttribute('href', '/?offset=1')
@@ -28,8 +28,19 @@ describe('DateNav', () => {
     const day2Link = screen.getByRole('link', { name: '前2天' })
     expect(day2Link).toHaveAttribute('href', '/?offset=2')
     expect(day2Link).toHaveClass('bg-primary')
-    
+
     const todayLink = screen.getByRole('link', { name: '當天' })
     expect(todayLink).not.toHaveClass('bg-primary')
+  })
+
+  it('should trigger onSelectOffset and prevent full page reload when provided', () => {
+    const handleSelectOffset = vi.fn()
+    render(<DateNav currentOffset={0} onSelectOffset={handleSelectOffset} />)
+
+    const day1Link = screen.getByRole('link', { name: '前1天' })
+    fireEvent.click(day1Link)
+
+    expect(handleSelectOffset).toHaveBeenCalledTimes(1)
+    expect(handleSelectOffset).toHaveBeenCalledWith(1)
   })
 })

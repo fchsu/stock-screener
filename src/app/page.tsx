@@ -1,7 +1,5 @@
-import StockList from '@/components/StockList'
-import DateNav from '@/components/DateNav'
-
-import { fetchScreeningResultsServer } from '@/services/queries'
+import ScreenerDashboard from '@/components/ScreenerDashboard'
+import { fetchMultiDateScreeningResultsServer } from '@/services/queries'
 import { getTaiwanDate } from '@/lib/utils'
 
 export default async function Home({
@@ -12,11 +10,11 @@ export default async function Home({
   const params = await searchParams
   const offset = Number(params.offset) || 0
 
-  // 統一使用台灣時區計算目標日期
-  const targetDateStr = getTaiwanDate(offset)
+  // 取得最近 5 天的日期陣列
+  const recentDates = Array.from({ length: 5 }, (_, i) => getTaiwanDate(i))
 
-  // SSR 預取當日篩選結果，消除 Waterfall
-  const initialData = await fetchScreeningResultsServer(targetDateStr)
+  // SSR 一次性批次抓取 5 天資料 (單一 Supabase 查詢)，徹底消除換頁網路延遲
+  const initialMultiData = await fetchMultiDateScreeningResultsServer(recentDates)
 
   return (
     <div className="space-y-8">
@@ -28,7 +26,6 @@ export default async function Home({
             <span>排程時間：每日 15:15（台灣時間）</span>
           </div>
         </div>
-        <p className="text-lg text-gray-600 dark:text-gray-400">篩選結果（{targetDateStr}）</p>
 
         <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-xs leading-relaxed text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
           <span className="font-semibold">💡 資料基準說明：</span>
@@ -40,8 +37,7 @@ export default async function Home({
         </div>
       </header>
 
-      <DateNav currentOffset={offset} />
-      <StockList date={targetDateStr} initialData={initialData} />
+      <ScreenerDashboard initialOffset={offset} initialMultiData={initialMultiData} />
     </div>
   )
 }
