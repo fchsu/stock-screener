@@ -2,7 +2,8 @@ import os
 import requests
 import yfinance as yf
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from tenacity import retry, stop_after_attempt, wait_fixed
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -20,12 +21,15 @@ yf_cache._TzCacheManager._tz_cache = yf_cache._TzCacheDummy()
 
 load_dotenv()
 
+TW_TZ = ZoneInfo("Asia/Taipei")
+US_TZ = ZoneInfo("America/New_York")
+
 # 允許透過環境變數指定執行日期（用於假日測試或歷史回測）
 target_date_env = os.environ.get("TARGET_DATE")
 if target_date_env:
-    run_date = datetime.strptime(target_date_env, "%Y-%m-%d")
+    run_date = datetime.strptime(target_date_env, "%Y-%m-%d").replace(tzinfo=TW_TZ)
 else:
-    run_date = datetime.now()
+    run_date = datetime.now(TW_TZ)
 
 # We expect NEXT_PUBLIC_SUPABASE_URL to be available
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
@@ -71,6 +75,46 @@ def is_market_open(dt: datetime) -> bool:
         return False
     return True
 
+def check_twse_market_open(tw_target_date: str) -> bool:
+    """台股開市檢查：週六日休市；平日以 0050.TW 探針驗證是否為颱風假/國定假日。"""
+    dt = datetime.strptime(tw_target_date, "%Y-%m-%d")
+    if dt.weekday() >= 5:
+        return False
+    try:
+        probe = yf.download("0050.TW", period="5d", progress=False)
+        if not probe.empty:
+            latest = probe.index[-1].strftime("%Y-%m-%d")
+            if latest < tw_target_date:
+                print(f"[TWSE] Latest trading date ({latest}) < target ({tw_target_date}). Market closed (holiday/typhoon).", flush=True)
+                return False
+    except Exception as e:
+        print(f"[TWSE Probe Warning] {e}", flush=True)
+    return True
+
+def get_us_target_info(tw_dt: datetime):
+    """計算美東對應交易日：15:15 台灣時間美股尚未開盤，美股剛結束的是美東前一曆日。"""
+    tw_1515 = tw_dt.replace(hour=15, minute=15)
+    us_time = tw_1515.astimezone(US_TZ)
+    target_us_date = (us_time.date() - timedelta(days=1)).strftime("%Y-%m-%d")
+    dt = datetime.strptime(target_us_date, "%Y-%m-%d")
+    is_weekend = dt.weekday() >= 5
+    return target_us_date, is_weekend
+
+def check_us_market_open(target_us_date: str, is_weekend: bool) -> bool:
+    """美股開市檢查：前日為六日直接休市；平日以 SPY 探針驗證是否遇美國國定假日。"""
+    if is_weekend:
+        return False
+    try:
+        probe = yf.download("SPY", period="5d", progress=False)
+        if not probe.empty:
+            latest = probe.index[-1].strftime("%Y-%m-%d")
+            if latest < target_us_date:
+                print(f"[US] Latest trading date ({latest}) < target ({target_us_date}). US market closed on {target_us_date}.", flush=True)
+                return False
+    except Exception as e:
+        print(f"[US Probe Warning] {e}", flush=True)
+    return True
+
 def convert_to_weekly(df: pd.DataFrame) -> pd.DataFrame:
     # 確保 index 是 datetime
     if not isinstance(df.index, pd.DatetimeIndex):
@@ -96,8 +140,9 @@ def bulk_download_with_retry(tickers):
     return yf.download(tickers, period="4y", progress=False, threads=True)
 
 def fetch_and_screen_twse():
-    if not is_market_open(run_date):
-        print(f"[TWSE] Market is closed on {run_date.strftime('%Y-%m-%d')} (Weekend).", flush=True)
+    today = run_date.strftime("%Y-%m-%d")
+    if not check_twse_market_open(today):
+        print(f"[TWSE] Market is closed on {today}.", flush=True)
         return "closed"
         
     symbols, name_map = get_twse_symbols()
@@ -116,6 +161,10 @@ def fetch_and_screen_twse():
             return results
 
         latest_market_date = data.index[-1].strftime("%Y-%m-%d") if not data.empty else ""
+        if latest_market_date and latest_market_date < today:
+            print(f"[TWSE] Latest market date ({latest_market_date}) < today ({today}). Market was closed.", flush=True)
+            return "closed"
+
         print(f"[TWSE Step 2/4] Note: Latest market trading date available in data is {latest_market_date}.", flush=True)
         print(f"[TWSE Step 3/4] Screening stocks against 'Old Yu's Three Questions' criteria...", flush=True)
         stats = {"total": len(symbols), "valid_history": 0, "momentum": 0, "strict": 0}
@@ -160,8 +209,9 @@ def fetch_and_screen_twse():
     return results
 
 def fetch_and_screen_us():
-    if not is_market_open(run_date):
-        print(f"[US] Market is closed on {run_date.strftime('%Y-%m-%d')} (Weekend).", flush=True)
+    target_us_date, is_weekend = get_us_target_info(run_date)
+    if not check_us_market_open(target_us_date, is_weekend):
+        print(f"[US] Market is closed on target date {target_us_date} (Weekend or Holiday).", flush=True)
         return "closed"
         
     results = []
@@ -188,6 +238,9 @@ def fetch_and_screen_us():
             return results
             
         latest_market_date = data.index[-1].strftime("%Y-%m-%d") if not data.empty else ""
+        if latest_market_date and latest_market_date < target_us_date:
+            print(f"[US] Latest market date ({latest_market_date}) < target ({target_us_date}). Market was closed on {target_us_date}.", flush=True)
+            return "closed"
         print(f"[US Step 2/4] Note: Latest market trading date available in data is {latest_market_date}.", flush=True)
         print(f"[US Step 2/4] Successfully downloaded historical matrix: shape={data.shape}", flush=True)
         print(f"[US Step 3/4] Screening stocks against 'Old Yu's Three Questions' criteria...", flush=True)

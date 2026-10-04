@@ -130,4 +130,55 @@ describe('StockList', () => {
 
     expect(screen.getByText(/該日無篩選紀錄/)).toBeInTheDocument()
   })
+
+  it('should display market section badges for time-lag clarity', () => {
+    vi.mocked(queries.useScreeningResult).mockReturnValue({
+      data: mockScreeningResults,
+      isLoading: false,
+      isError: false,
+      error: null,
+      isSuccess: true,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    render(<StockList date="2026-04-17" />)
+
+    expect(screen.getByText('當日數據')).toBeInTheDocument()
+    expect(screen.getByText('前一交易日數據（當日尚未開盤）')).toBeInTheDocument()
+  })
+
+  it('should display clear closed notices for TWSE and US markets', () => {
+    const closedResults = [
+      {
+        id: 'closed-twse',
+        date: '2026-10-03',
+        market: 'TWSE' as const,
+        status: 'closed' as const,
+        assets: [],
+        updated_at: '2026-10-03T07:15:00Z',
+      },
+      {
+        id: 'closed-us',
+        date: '2026-10-03',
+        market: 'S&P 500' as const,
+        status: 'closed' as const,
+        assets: [],
+        updated_at: '2026-10-03T07:15:00Z',
+      },
+    ]
+
+    vi.mocked(queries.useScreeningResult).mockReturnValue({
+      data: closedResults,
+      isLoading: false,
+      isError: false,
+      error: null,
+      isSuccess: true,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    render(<StockList date="2026-10-03" />)
+
+    expect(screen.getByText('今日休市（未開盤交易，週末或國定假日／颱風假）')).toBeInTheDocument()
+    expect(screen.getByText('前一交易日休市（未開盤交易，週末或美國國定假日）')).toBeInTheDocument()
+  })
 })

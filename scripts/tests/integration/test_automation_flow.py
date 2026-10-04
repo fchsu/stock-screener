@@ -27,9 +27,10 @@ def test_automation_flow_success(mock_fetch_twse, mock_fetch_us, mock_supabase):
     assert mock_supabase.table.called
 
 @patch('automation.screener.supabase')
+@patch('automation.screener.check_twse_market_open', return_value=True)
 @patch('automation.screener.is_market_open', return_value=True)
 @patch('automation.screener.yf.download')
-def test_automation_flow_retry_on_failure(mock_download, mock_is_open, mock_supabase):
+def test_automation_flow_retry_on_failure(mock_download, mock_is_open, mock_check_twse, mock_supabase):
     """
     Test that the automation flow retries up to 3 times on failure.
     fetch_single_twse 使用 yfinance，tenacity 會在失敗時重試。

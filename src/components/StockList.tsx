@@ -67,12 +67,29 @@ export default function StockList({
   const twseResult = data.find((item) => item.market === 'TWSE')
   const usResult = data.find((item) => ['NASDAQ', 'US', 'S&P 500'].includes(item.market))
 
-  const renderMarketSection = (title: string, result: typeof twseResult) => {
+  const renderMarketSection = (
+    title: string,
+    badgeText: string,
+    closedNotice: string,
+    result: typeof twseResult
+  ) => {
     if (!result) return null
+
+    const tradingDate = result.assets?.[0]?.tradingDate
 
     return (
       <section>
-        <h2 className="mb-4 text-2xl font-bold">{title}</h2>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <h2 className="text-2xl font-bold">{title}</h2>
+          <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            {badgeText}
+          </span>
+          {tradingDate && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              （資料基準日：{tradingDate}）
+            </span>
+          )}
+        </div>
 
         {result.status === 'fetching' && (
           <div className="rounded-lg bg-blue-50 p-4 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
@@ -88,7 +105,7 @@ export default function StockList({
 
         {result.status === 'closed' && (
           <div className="rounded-lg bg-yellow-50 p-4 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">
-            今日休市
+            {closedNotice}
           </div>
         )}
 
@@ -148,8 +165,18 @@ export default function StockList({
 
   return (
     <div className="space-y-8">
-      {renderMarketSection('台股', twseResult)}
-      {renderMarketSection('美股', usResult)}
+      {renderMarketSection(
+        '台股',
+        '當日數據',
+        '今日休市（未開盤交易，週末或國定假日／颱風假）',
+        twseResult
+      )}
+      {renderMarketSection(
+        '美股',
+        '前一交易日數據（當日尚未開盤）',
+        '前一交易日休市（未開盤交易，週末或美國國定假日）',
+        usResult
+      )}
     </div>
   )
 }

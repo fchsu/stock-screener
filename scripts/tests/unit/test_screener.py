@@ -2,26 +2,104 @@ import pytest
 import pandas as pd
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
-from automation.screener import fetch_and_screen_twse, fetch_and_screen_us, get_twse_symbols, is_market_open
+from automation.screener import (
+    fetch_and_screen_twse,
+    fetch_and_screen_us,
+    get_twse_symbols,
+    is_market_open,
+    check_twse_market_open,
+    get_us_target_info,
+    check_us_market_open,
+    TW_TZ,
+)
 
 def test_is_market_open():
-    # 週末休市
-    sat = datetime(2026, 4, 11) # Saturday
+    sat = datetime(2026, 4, 11)  # Saturday
     assert is_market_open(sat) == False
-    
-    # 平日開市
-    mon = datetime(2026, 4, 13) # Monday
+
+    mon = datetime(2026, 4, 13)  # Monday
     assert is_market_open(mon) == True
 
-@patch('automation.screener.is_market_open')
-def test_fetch_and_screen_twse_closed(mock_is_open):
+def test_get_us_target_info():
+    # 台灣週六 15:15 -> 美東週五 (平日，美股剛收盤)
+    tw_sat = datetime(2026, 10, 3, 15, 15, tzinfo=TW_TZ)
+    target_us_date, is_weekend = get_us_target_info(tw_sat)
+    assert target_us_date == "2026-10-02"
+    assert is_weekend == False
+
+    # 台灣週一 15:15 -> 美東週日 (週末休市，美股週一尚未開盤)
+    tw_mon = datetime(2026, 10, 5, 15, 15, tzinfo=TW_TZ)
+    target_us_date, is_weekend = get_us_target_info(tw_mon)
+    assert target_us_date == "2026-10-04"
+    assert is_weekend == True
+
+    # 台灣週日 15:15 -> 美東週六 (週末休市)
+    tw_sun = datetime(2026, 10, 4, 15, 15, tzinfo=TW_TZ)
+    target_us_date, is_weekend = get_us_target_info(tw_sun)
+    assert target_us_date == "2026-10-03"
+    assert is_weekend == True
+
+    # 台灣週二 15:15 -> 美東週一 (平日交易日)
+    tw_tue = datetime(2026, 10, 6, 15, 15, tzinfo=TW_TZ)
+    target_us_date, is_weekend = get_us_target_info(tw_tue)
+    assert target_us_date == "2026-10-05"
+    assert is_weekend == False
+
+def test_check_twse_market_open_weekend():
+    # 週六或週日直接判定為 False，不需打網路探針
+    assert check_twse_market_open("2026-10-03") == False
+    assert check_twse_market_open("2026-10-04") == False
+
+@patch("automation.screener.yf.download")
+def test_check_twse_market_open_weekday_normal(mock_download):
+    # 平日正常開市：0050.TW 最新日期等於目標日
+    dates = pd.date_range("2026-09-25", "2026-09-30")
+    mock_df = pd.DataFrame(index=dates, data={"Close": [100] * len(dates)})
+    mock_download.return_value = mock_df
+
+    assert check_twse_market_open("2026-09-30") == True
+
+@patch("automation.screener.yf.download")
+def test_check_twse_market_open_typhoon_or_holiday(mock_download):
+    # 平日颱風假或國定假日：目標日為 2026-10-01，但 0050.TW 最新 K 線停留在 2026-09-30
+    dates = pd.date_range("2026-09-25", "2026-09-30")
+    mock_df = pd.DataFrame(index=dates, data={"Close": [100] * len(dates)})
+    mock_download.return_value = mock_df
+
+    assert check_twse_market_open("2026-10-01") == False
+
+def test_check_us_market_open_weekend():
+    # 前一曆日為六日直接休市
+    assert check_us_market_open("2026-10-03", is_weekend=True) == False
+    assert check_us_market_open("2026-10-04", is_weekend=True) == False
+
+@patch("automation.screener.yf.download")
+def test_check_us_market_open_weekday_normal(mock_download):
+    # 美東平日正常開市：SPY 最新日期等於目標日
+    dates = pd.date_range("2026-09-25", "2026-09-29")
+    mock_df = pd.DataFrame(index=dates, data={"Close": [500] * len(dates)})
+    mock_download.return_value = mock_df
+
+    assert check_us_market_open("2026-09-29", is_weekend=False) == True
+
+@patch("automation.screener.yf.download")
+def test_check_us_market_open_holiday(mock_download):
+    # 美東平日國定假日（如感恩節）：目標日為 2026-11-26，但 SPY 最新 K 線停在 2026-11-25
+    dates = pd.date_range("2026-11-20", "2026-11-25")
+    mock_df = pd.DataFrame(index=dates, data={"Close": [500] * len(dates)})
+    mock_download.return_value = mock_df
+
+    assert check_us_market_open("2026-11-26", is_weekend=False) == False
+
+@patch("automation.screener.check_twse_market_open")
+def test_fetch_and_screen_twse_closed(mock_check_twse):
     # 測試休市時應直接回傳 closed，不抓取資料
-    mock_is_open.return_value = False
-    
+    mock_check_twse.return_value = False
+
     results = fetch_and_screen_twse()
     assert results == "closed"
 
-@patch('automation.screener.requests.get')
+@patch("automation.screener.requests.get")
 def test_get_twse_symbols(mock_get):
     # TWSE OpenAPI STOCK_DAY_ALL 格式
     mock_response = MagicMock()
@@ -38,84 +116,69 @@ def test_get_twse_symbols(mock_get):
     assert "2330" in symbols
     assert "0050" in symbols
     assert "2317" not in symbols
-    # name_map 應包含通過過濾的股票名稱
     assert name_map["2330"] == "台積電"
     assert name_map["0050"] == "元大台灣50"
 
 def create_passing_daily_data():
-    dates = pd.date_range(end=datetime.now(), periods=1500, freq='B')
-    df = pd.DataFrame(index=dates, columns=['Open', 'High', 'Low', 'Close', 'Volume'])
-    df['Open'] = 80
-    df['High'] = 80
-    df['Low'] = 80
-    df['Close'] = 80
-    df['Volume'] = 2000000  # >= 1M
-    
-    # Global max & min within the last 1000 days (200 weeks)
+    dates = pd.date_range(end=datetime.now(), periods=1500, freq="B")
+    df = pd.DataFrame(index=dates, columns=["Open", "High", "Low", "Close", "Volume"])
+    df["Open"] = 80
+    df["High"] = 80
+    df["Low"] = 80
+    df["Close"] = 80
+    df["Volume"] = 2000000
+
     df.iloc[-900] = [1000, 1000, 1000, 1000, 2000000]
     df.iloc[-899] = [10, 10, 10, 10, 2000000]
-    
-    # Day -20: P1
     df.iloc[-20] = [80, 80, 50, 80, 2000000]
-    # Day -15: P2
     df.iloc[-15] = [80, 100, 80, 80, 2000000]
-    # Day -10: P3
     df.iloc[-10] = [80, 80, 20, 80, 2000000]
-    # Day -7: P4
     df.iloc[-7] = [80, 90, 80, 80, 2000000]
-    # Day -1 (最新的一天): P5 (擔任週內的最低點，製造出下影線，同時也是 P5)
     df.iloc[-1] = [80, 80, 50, 80, 2000000]
-    
+
     return df
 
-@patch('automation.screener.evaluate_trend_reversal_criteria')
-@patch('automation.screener.yf.download')
-@patch('automation.screener.pd.read_html')
-@patch('automation.screener.is_market_open')
-@patch('automation.screener.requests.get')
-def test_fetch_and_screen_us(mock_get, mock_is_open, mock_read_html, mock_download, mock_evaluate):
-    mock_is_open.return_value = True
-    # Default evaluate to False, but True for AAPL
-    def side_effect(daily, weekly):
-        # The mock setup defines AAPL in index/columns. We can just return True.
-        # But wait, there are multiple symbols passed inside fetch_and_screen_us loop!
-        # Let's just return True for everything, and let the assertions fail? No.
-        # MSFT is filtered out BEFORE evaluate is called because volume < 1,000,000.
-        # So evaluate is ONLY called for AAPL.
-        return 'strict'
-    mock_evaluate.side_effect = side_effect
-    
-    # Mock requests.get to prevent real network call
+@patch("automation.screener.evaluate_trend_reversal_criteria")
+@patch("automation.screener.yf.download")
+@patch("automation.screener.pd.read_html")
+@patch("automation.screener.check_us_market_open")
+@patch("automation.screener.get_us_target_info")
+@patch("automation.screener.requests.get")
+def test_fetch_and_screen_us(mock_get, mock_get_target_info, mock_check_us, mock_read_html, mock_download, mock_evaluate):
+    passing_data = create_passing_daily_data()
+    latest_date_str = passing_data.index[-1].strftime("%Y-%m-%d")
+    mock_get_target_info.return_value = (latest_date_str, False)
+    mock_check_us.return_value = True
+    mock_evaluate.return_value = "strict"
+
     mock_response = MagicMock()
     mock_response.text = "<html>dummy</html>"
     mock_get.return_value = mock_response
-    
-    # Mock Wikipedia response
+
     mock_df = pd.DataFrame({"Symbol": ["AAPL", "MSFT"]})
     mock_read_html.return_value = [mock_df]
-    
-    # 產生一組會完美通過老余三問的資料 (AAPL) 與一組會被過濾掉的資料 (MSFT)
-    passing_data = create_passing_daily_data()
-    
+
     columns = pd.MultiIndex.from_tuples([
-        ('Open', 'AAPL'), ('High', 'AAPL'), ('Low', 'AAPL'), ('Close', 'AAPL'), ('Volume', 'AAPL'),
-        ('Open', 'MSFT'), ('High', 'MSFT'), ('Low', 'MSFT'), ('Close', 'MSFT'), ('Volume', 'MSFT')
+        ("Open", "AAPL"), ("High", "AAPL"), ("Low", "AAPL"), ("Close", "AAPL"), ("Volume", "AAPL"),
+        ("Open", "MSFT"), ("High", "MSFT"), ("Low", "MSFT"), ("Close", "MSFT"), ("Volume", "MSFT"),
     ])
-    
-    # 建立 MultiIndex DataFrame
+
     mock_yf_data = pd.DataFrame(index=passing_data.index, columns=columns)
-    for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
-        mock_yf_data[(col, 'AAPL')] = passing_data[col]
-        # MSFT 成交量故意小於 1M，會在前置過濾就被刷掉
-        mock_yf_data[(col, 'MSFT')] = passing_data[col]
-        if col == 'Volume':
-            mock_yf_data[(col, 'MSFT')] = 500000 
-            
+    for col in ["Open", "High", "Low", "Close", "Volume"]:
+        mock_yf_data[(col, "AAPL")] = passing_data[col]
+        mock_yf_data[(col, "MSFT")] = passing_data[col]
+        if col == "Volume":
+            mock_yf_data[(col, "MSFT")] = 500000
+
     mock_download.return_value = mock_yf_data
-    
+
     results = fetch_and_screen_us()
-    
-    # 應該只有 AAPL 會通過過濾且通過所有整合邏輯判斷
+
     assert len(results) == 1
-    assert results[0]['symbol'] == 'AAPL'
-    assert results[0]['tradingDate'] == passing_data.index[-1].strftime('%Y-%m-%d')
+    assert results[0]["symbol"] == "AAPL"
+    assert results[0]["tradingDate"] == latest_date_str
+
+@patch("automation.screener.check_us_market_open")
+def test_fetch_and_screen_us_closed(mock_check_us):
+    mock_check_us.return_value = False
+    assert fetch_and_screen_us() == "closed"
