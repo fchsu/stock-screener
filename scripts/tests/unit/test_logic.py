@@ -147,3 +147,89 @@ def test_evaluate_trend_reversal_criteria_pass_non_adjacent_swing_lows():
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
     assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'strict'
 
+def test_evaluate_trend_reversal_criteria_fail_if_intermediate_swing_low_between_p4_and_p5():
+    # 測試 P4 與 P5 之間夾帶其他波段低點 (結構破裂，如 1307 案例)
+    weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
+    
+    # 建立標準 P1~P4，但在 P4 與 P5 之間插入一個 Swing Low
+    data = []
+    for _ in range(60):
+        data.append({'Open': 105, 'High': 105, 'Low': 105, 'Close': 105})
+    # P1
+    data.append({'Open': 102, 'High': 105, 'Low': 100, 'Close': 103})
+    for _ in range(3): data.append({'Open': 105, 'High': 105, 'Low': 105, 'Close': 105})
+    # P2
+    data.append({'Open': 118, 'High': 120, 'Low': 115, 'Close': 119})
+    for _ in range(3): data.append({'Open': 105, 'High': 105, 'Low': 105, 'Close': 105})
+    # P3
+    data.append({'Open': 82, 'High': 85, 'Low': 80, 'Close': 83})
+    for _ in range(3): data.append({'Open': 105, 'High': 105, 'Low': 105, 'Close': 105})
+    # P4
+    data.append({'Open': 108, 'High': 110, 'Low': 105, 'Close': 109})
+    for _ in range(3): data.append({'Open': 105, 'High': 105, 'Low': 105, 'Close': 105})
+    # 中間干擾波段 (產生多餘的 Swing Low)
+    data.append({'Open': 88, 'High': 92, 'Low': 85, 'Close': 89})
+    data.append({'Open': 105, 'High': 105, 'Low': 95, 'Close': 105})
+    data.append({'Open': 105, 'High': 105, 'Low': 95, 'Close': 105})
+    data.append({'Open': 105, 'High': 105, 'Low': 95, 'Close': 105})
+    # P5
+    data.append({'Open': 102, 'High': 105, 'Low': 100, 'Close': 103})
+    daily_data = pd.DataFrame(data)
+
+    # 應降級為 momentum
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'momentum'
+
+def test_evaluate_trend_reversal_criteria_fail_if_p1_p5_span_exceeds_35_bars():
+    # 測試 P1 ~ P5 總天數跨度過長 (> 35 根 K 棒)
+    weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
+    data = []
+    for _ in range(30):
+        data.append({'Open': 105, 'High': 105, 'Low': 105, 'Close': 105})
+    # P1
+    data.append({'Open': 102, 'High': 105, 'Low': 100, 'Close': 103})
+    # 中間拉長 40 根 K 棒
+    for _ in range(40):
+        data.append({'Open': 105, 'High': 105, 'Low': 105, 'Close': 105})
+    # P2
+    data.append({'Open': 118, 'High': 120, 'Low': 115, 'Close': 119})
+    for _ in range(3): data.append({'Open': 105, 'High': 105, 'Low': 105, 'Close': 105})
+    # P3
+    data.append({'Open': 82, 'High': 85, 'Low': 80, 'Close': 83})
+    for _ in range(3): data.append({'Open': 105, 'High': 105, 'Low': 105, 'Close': 105})
+    # P4
+    data.append({'Open': 108, 'High': 110, 'Low': 105, 'Close': 109})
+    for _ in range(3): data.append({'Open': 105, 'High': 105, 'Low': 105, 'Close': 105})
+    # P5 (距 P1 已達 > 50 根)
+    data.append({'Open': 102, 'High': 105, 'Low': 100, 'Close': 103})
+    daily_data = pd.DataFrame(data)
+
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'momentum'
+
+def test_evaluate_trend_reversal_criteria_fail_if_boundaries_are_purely_ancient():
+    # 測試週線雙點都在 60 週以前 (缺乏近時性，不構成當前有效邊界)
+    data = []
+    for _ in range(200):
+        data.append({'Open': 100, 'High': 105, 'Low': 95, 'Close': 100})
+    # 兩個低點都放在 70 週以前
+    data[-80] = {'Open': 52, 'High': 55, 'Low': 50, 'Close': 53}
+    data[-81]['Low'] = 65
+    data[-79]['Low'] = 65
+    data[-70] = {'Open': 53, 'High': 56, 'Low': 51, 'Close': 54}
+    data[-71]['Low'] = 65
+    data[-69]['Low'] = 65
+    
+    # 之後放入更多非邊界的 swing lows 使得這兩點不再屬於最近 5 個 swing lows
+    for offset in [-50, -40, -30, -20, -10]:
+        data[offset]['Low'] = 80
+        data[offset-1]['Low'] = 90
+        data[offset+1]['Low'] = 90
+
+    # 當前週
+    data.append({'Open': 54, 'High': 55, 'Low': 48, 'Close': 52})
+    weekly_data = pd.DataFrame(data)
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
+
+    # 由於遠古低點被過濾，無有效邊界，應回傳 none
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'none'
+
+

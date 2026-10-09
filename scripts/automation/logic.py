@@ -61,8 +61,12 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
     # 尋找歷史形成的關鍵邊界 (任意兩點低點差距在 5% 以內，形成有效水平支撐帶)
     valid_boundaries = []
     n_sl = len(sorted_sl)
+    total_weeks = len(weekly_data)
     for i in range(n_sl - 1, -1, -1):
         idx_a, price_a = sorted_sl[i]
+        # A 點必須具備近時性：在過去 52 週內（近 1 年）或屬於最近 5 個 Swing Lows 之一
+        if (total_weeks - idx_a > 52) and (n_sl - 1 - i >= 5):
+            continue
         for j in range(i - 1, -1, -1):
             idx_b, price_b = sorted_sl[j]
             max_ab = max(price_a, price_b)
@@ -122,42 +126,53 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
     p5_idx = len(lows) - 1
     p5 = lows[p5_idx]
     
-    # P3 是在 P5 之前最低的 Swing Low
-    valid_p3_candidates = [sl for sl in swing_lows if sl[0] < p5_idx]
+    # P4 必須是 P5 之前「最近的一個」Swing High (反彈小頸線)
+    valid_p4_candidates = [sh for sh in swing_highs if sh[0] < p5_idx]
+    if not valid_p4_candidates:
+        return 'momentum'
+    p4_idx, p4 = valid_p4_candidates[-1]
+    
+    # 防護 1: P4 與 P5 之間不可夾帶其他 Swing Low (P5 必須是緊接在 P4 之後的回踩腳)
+    if any(p4_idx < sl[0] < p5_idx for sl in swing_lows):
+        return 'momentum'
+
+    # 防護 2: P5 與 P4 間隔不可過長 (回踩確認需在 12 根日 K 以內完成)
+    if (p5_idx - p4_idx) > 12:
+        return 'momentum'
+
+    # P3 是在 P4 之前最低的 Swing Low (破底點)
+    valid_p3_candidates = [sl for sl in swing_lows if sl[0] < p4_idx]
     if not valid_p3_candidates:
         return 'momentum'
-        
-    # P3 必須是全局（或者近期）最低點
     p3_idx, p3 = min(valid_p3_candidates, key=lambda x: x[1])
-    
-    # P1 是在 P3 之前的 Swing Low
+
+    # 防護 3: P3 到 P4 之間不可夾帶其他 Swing High (P3 破底後直接反彈至 P4)
+    if any(p3_idx < sh[0] < p4_idx for sh in swing_highs):
+        return 'momentum'
+
+    # P1 是在 P3 之前的 Swing Low (取最靠近 P3 的那個)
     valid_p1_candidates = [sl for sl in swing_lows if sl[0] < p3_idx]
     if not valid_p1_candidates:
         return 'momentum'
-    # P1 取最靠近 P3 的那個
     p1_idx, p1 = valid_p1_candidates[-1]
-    
+
     # P2 是在 P1 到 P3 之間的 Swing High
     valid_p2_candidates = [sh for sh in swing_highs if p1_idx < sh[0] < p3_idx]
     if not valid_p2_candidates:
         return 'momentum'
-    # P2 取最高點
     p2_idx, p2 = max(valid_p2_candidates, key=lambda x: x[1])
-    
-    # P4 是在 P3 到 P5 之間的 Swing High
-    valid_p4_candidates = [sh for sh in swing_highs if p3_idx < sh[0] < p5_idx]
-    if not valid_p4_candidates:
+
+    # 防護 4: 整體 P1 到 P5 跨度不可超過 35 根 K 棒 (約 7 週以內，保持型態緊湊)
+    if (p5_idx - p1_idx) > 35:
         return 'momentum'
-    # P4 取最高點
-    p4_idx, p4 = max(valid_p4_candidates, key=lambda x: x[1])
-    
+
     # 條件 3-0: 右腳 P5 必須高於或等於破底點 P3 (破底翻右腳不可再創新低破底)
     if p5 < p3:
         return 'momentum'
 
     # 條件 3-1: P5 與 P1 的價格落差需在 3% 以內
     p1_p5_diff_ratio = abs(p5 - p1) / p1
-    if abs(p5 - p1) / p1 > 0.03:
+    if p1_p5_diff_ratio > 0.03:
         return 'momentum'
         
     # 條件 3-2: (P2 - P3) * 0.25 <= (P4 - P5) <= (P2 - P3) * 0.75
