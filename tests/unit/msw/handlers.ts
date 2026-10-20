@@ -44,4 +44,19 @@ export const handlers = [
   http.get('*/rest/v1/screening_results', () => {
     return HttpResponse.json(mockScreeningResults)
   }),
+  // 站內 K 線 API: GET /api/ohlcv
+  http.get('*/api/ohlcv', ({ request }) => {
+    const url = new URL(request.url)
+    const symbol = url.searchParams.get('symbol') || '2330.TW'
+    const interval = url.searchParams.get('interval') || '1d'
+    return HttpResponse.json({
+      symbol,
+      interval,
+      bars: [
+        { time: 1700000000, open: 500, high: 520, low: 495, close: 515, volume: 12000 },
+        { time: 1700086400, open: 515, high: 530, low: 510, close: 525, volume: 15000 },
+      ],
+      supportBoundary: 495,
+    })
+  }),
 ]

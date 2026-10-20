@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { ScreeningResult } from '@/lib/types'
+import type { ChartInterval, OHLCVResponse } from '@/lib/ohlcv'
 
 // 提取特定日期的篩選結果
 export const fetchScreeningResults = async (date: string): Promise<ScreeningResult[]> => {
@@ -60,5 +61,29 @@ export const useScreeningResult = (date: string, initialData?: ScreeningResult[]
     queryFn: () => fetchScreeningResults(date),
     staleTime: 1000 * 60 * 5, // 5分鐘內不重新請求
     initialData,
+  })
+}
+
+export const fetchStockOHLCV = async (
+  symbol: string,
+  interval: ChartInterval
+): Promise<OHLCVResponse> => {
+  const res = await fetch(
+    `/api/ohlcv?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`
+  )
+  if (!res.ok) {
+    throw new Error('無法取得 K 線資料')
+  }
+  return res.json()
+}
+
+export const useStockOHLCV = (symbol: string | null, interval: ChartInterval) => {
+  return useQuery({
+    queryKey: ['stockOHLCV', symbol, interval],
+    queryFn: () => fetchStockOHLCV(symbol!, interval),
+    enabled: Boolean(symbol),
+    retry: 1,
+    // 15 分鐘前端快取，避免重複觸發 Serverless API
+    staleTime: 1000 * 60 * 15,
   })
 }
