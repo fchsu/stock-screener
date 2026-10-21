@@ -12,7 +12,7 @@ const DateNav = ({ currentOffset = 0, onSelectOffset }: DateNavProps) => {
   const days = Array.from({ length: 5 }, (_, i) => i)
 
   return (
-    <div className="mb-6 flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-center gap-1">
       {days.map((offset) => {
         const isCurrent = offset === currentOffset
         const label = offset === 0 ? '當天' : `前${offset}天`
@@ -29,7 +29,11 @@ const DateNav = ({ currentOffset = 0, onSelectOffset }: DateNavProps) => {
                 onSelectOffset(offset)
               }
             }}
-            className={buttonVariants({ variant: isCurrent ? 'default' : 'outline' })}
+            className={buttonVariants({
+              variant: isCurrent ? 'default' : 'outline',
+              size: 'sm',
+              className: 'h-7 px-2.5 text-xs',
+            })}
           >
             {label}
           </Link>

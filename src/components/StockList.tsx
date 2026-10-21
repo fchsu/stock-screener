@@ -152,12 +152,12 @@ export default function StockList({
   const tradingDate = currentResult?.assets?.[0]?.tradingDate
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-      {/* 左側邊欄：市場切換 + 條列式雙群組清單 */}
-      <aside className="flex flex-col rounded-xl border border-gray-200 bg-white shadow-xs lg:col-span-4 xl:col-span-3 dark:border-gray-800 dark:bg-gray-950">
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden lg:flex-row">
+      {/* 左側邊欄：市場切換 + 條列式雙群組清單（全頁唯一允許垂直捲動的區域） */}
+      <aside className="flex max-h-60 shrink-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs lg:max-h-none lg:w-64 xl:w-72 dark:border-gray-800 dark:bg-gray-950">
         {/* 台股 / 美股 切換 Tab */}
         <div
-          className="grid grid-cols-2 gap-1 border-b border-gray-200 bg-gray-100/70 p-1.5 dark:border-gray-800 dark:bg-gray-900/70"
+          className="grid shrink-0 grid-cols-2 gap-1 border-b border-gray-200 bg-gray-100/70 p-1 dark:border-gray-800 dark:bg-gray-900/70"
           role="tablist"
           aria-label="市場切換"
         >
@@ -169,14 +169,14 @@ export default function StockList({
               setActiveMarket('TWSE')
               setSelectedSymbol(null)
             }}
-            className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold transition-colors ${
+            className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition-colors ${
               activeMarket === 'TWSE'
                 ? 'bg-white text-blue-600 shadow-xs dark:bg-gray-800 dark:text-blue-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             }`}
           >
             <span>台股</span>
-            <span className="rounded-full bg-gray-200/80 px-2 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+            <span className="rounded-full bg-gray-200/80 px-1.5 py-0.5 text-[11px] text-gray-700 dark:bg-gray-700 dark:text-gray-300">
               {twseCount}
             </span>
           </button>
@@ -189,29 +189,29 @@ export default function StockList({
               setActiveMarket('US')
               setSelectedSymbol(null)
             }}
-            className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold transition-colors ${
+            className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition-colors ${
               activeMarket === 'US'
                 ? 'bg-white text-blue-600 shadow-xs dark:bg-gray-800 dark:text-blue-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             }`}
           >
             <span>美股</span>
-            <span className="rounded-full bg-gray-200/80 px-2 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+            <span className="rounded-full bg-gray-200/80 px-1.5 py-0.5 text-[11px] text-gray-700 dark:bg-gray-700 dark:text-gray-300">
               {usCount}
             </span>
           </button>
         </div>
 
         {/* 市場資料基準說明列 */}
-        <div className="flex flex-wrap items-center justify-between gap-1 border-b border-gray-100 px-3.5 py-2 text-xs text-gray-500 dark:border-gray-800/80 dark:text-gray-400">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-1 border-b border-gray-100 px-3 py-1.5 text-[11px] text-gray-500 dark:border-gray-800/80 dark:text-gray-400">
           <span className="rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
             {badgeText}
           </span>
           {tradingDate && <span>資料基準日：{tradingDate}</span>}
         </div>
 
-        {/* 清單內容區 */}
-        <div className="max-h-[640px] flex-1 space-y-4 overflow-y-auto p-3">
+        {/* 清單內容區（唯一垂直捲動區） */}
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2.5">
           {!currentResult && (
             <div className="rounded-lg bg-gray-50 p-4 text-center text-sm text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
               無此市場篩選紀錄
@@ -300,7 +300,7 @@ export default function StockList({
         </div>
 
         {/* 底部操作提示 */}
-        <div className="border-t border-gray-100 px-3.5 py-2 text-[11px] text-gray-400 dark:border-gray-800/80">
+        <div className="shrink-0 border-t border-gray-100 px-3 py-1.5 text-[11px] text-gray-400 dark:border-gray-800/80">
           快捷鍵：<kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">↑</kbd>{' '}
           <kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">↓</kbd> 切換股票 ·{' '}
           <kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">1</kbd>{' '}
@@ -309,8 +309,8 @@ export default function StockList({
         </div>
       </aside>
 
-      {/* 右側主畫面：K 線圖檢視區 */}
-      <section className="lg:col-span-8 xl:col-span-9">
+      {/* 右側主畫面：K 線圖檢視區（自動填滿剩餘寬高） */}
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {selectedStock ? (
           <StockChart
             stock={selectedStock}
@@ -323,7 +323,7 @@ export default function StockList({
             onToggleViewMode={() => setViewMode((prev) => (prev === 'single' ? 'multi' : 'single'))}
           />
         ) : (
-          <div className="flex h-[480px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white/50 p-8 text-center text-gray-500 dark:border-gray-800 dark:bg-gray-950/50">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white/50 p-8 text-center text-gray-500 dark:border-gray-800 dark:bg-gray-950/50">
             <p className="text-sm">請從左側邊欄選擇一檔標的，或切換至另一個市場查看 K 線圖。</p>
           </div>
         )}
