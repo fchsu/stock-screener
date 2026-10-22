@@ -19,6 +19,10 @@ export interface OHLCVResponse {
 interface YahooChartResponseShape {
   chart?: {
     result?: Array<{
+      meta?: {
+        gmtoffset?: number
+        dataGranularity?: string
+      }
       timestamp?: number[]
       indicators?: {
         quote?: Array<{
@@ -33,10 +37,20 @@ interface YahooChartResponseShape {
   }
 }
 
+function getLocalWeekMondayKey(timeSec: number, gmtoffsetSec: number): string {
+  const d = new Date((timeSec + gmtoffsetSec) * 1000)
+  const dayOfWeek = d.getUTCDay()
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  d.setUTCDate(d.getUTCDate() + diffToMonday)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    d.getUTCDate()
+  ).padStart(2, '0')}`
+}
+
 /**
- * 解析 Yahoo Finance v8 chart JSON，過濾空值並依時間升冪排序去重
+ * 解析 Yahoo Finance v8 chart JSON，過濾空值、依時間升冪排序，並合併週線中同一週的最後一日重複 K 棒
  */
-export function parseYahooChartResponse(raw: unknown): OHLCVBar[] {
+export function parseYahooChartResponse(raw: unknown, interval?: ChartInterval): OHLCVBar[] {
   const data = raw as YahooChartResponseShape
   const result = data?.chart?.result?.[0]
   const timestamps = result?.timestamp
@@ -45,6 +59,9 @@ export function parseYahooChartResponse(raw: unknown): OHLCVBar[] {
   if (!timestamps || !quote) {
     return []
   }
+
+  const gmtoffset = result?.meta?.gmtoffset ?? 28800
+  const granularity = interval ?? result?.meta?.dataGranularity
 
   const seenTimes = new Set<number>()
   const bars: OHLCVBar[] = []
@@ -87,6 +104,28 @@ export function parseYahooChartResponse(raw: unknown): OHLCVBar[] {
   }
 
   bars.sort((a, b) => a.time - b.time)
+
+  // Yahoo Finance 在 1wk 時框下，除了當週週一 K 棒外，還會在陣列尾端額外附加一根最新交易日 K 棒，需合併為同一根週 K
+  if (granularity === '1wk' && bars.length > 1) {
+    const merged: OHLCVBar[] = []
+    let prevWeekKey = ''
+
+    for (const bar of bars) {
+      const weekKey = getLocalWeekMondayKey(bar.time, gmtoffset)
+      if (merged.length > 0 && weekKey === prevWeekKey) {
+        const prev = merged[merged.length - 1]
+        prev.high = Number(Math.max(prev.high, bar.high).toFixed(2))
+        prev.low = Number(Math.min(prev.low, bar.low).toFixed(2))
+        prev.close = bar.close
+        prev.volume = prev.volume + bar.volume
+      } else {
+        merged.push({ ...bar })
+        prevWeekKey = weekKey
+      }
+    }
+    return merged
+  }
+
   return bars
 }
 

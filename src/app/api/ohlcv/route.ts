@@ -46,7 +46,7 @@ async function fetchYahooChart(
 
     if (res.ok) {
       const json = await res.json()
-      const bars = parseYahooChartResponse(json)
+      const bars = parseYahooChartResponse(json, interval)
       if (bars.length > 0) {
         memoryCache.set(cacheKey, {
           expiresAt: Date.now() + CACHE_TTL_MS,

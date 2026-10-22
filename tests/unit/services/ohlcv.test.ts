@@ -196,4 +196,46 @@ describe('ohlcv utilities', () => {
     expect(metrics.changePercent).toBeCloseTo(5.0)
     expect(metrics.formattedVolume).toBe('8,000 張')
   })
+
+  it('should merge trailing partial weekly bar (e.g. 10/22 Thursday) into the same week Monday bar (10/19)', () => {
+    // 2026-10-12 00:00 CST (Monday) = 1791734400
+    // 2026-10-19 00:00 CST (Monday) = 1792339200
+    // 2026-10-22 13:30 CST (Thursday) = 1792647000
+    const mockWeeklyYahooJson = {
+      chart: {
+        result: [
+          {
+            meta: {
+              gmtoffset: 28800,
+              dataGranularity: '1wk',
+            },
+            timestamp: [1791734400, 1792339200, 1792647000],
+            indicators: {
+              quote: [
+                {
+                  open: [245, 242, 238],
+                  high: [247, 242.5, 246],
+                  low: [238, 238.5, 236],
+                  close: [244, 239.5, 243],
+                  volume: [200000000, 80000000, 30000000],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    }
+
+    const bars = parseYahooChartResponse(mockWeeklyYahooJson, '1wk')
+    // 10/19 與 10/22 屬於同一週，應合併為一根 10/19 的週 K
+    expect(bars).toHaveLength(2)
+    expect(bars[1]).toEqual({
+      time: 1792339200,
+      open: 242,
+      high: 246,
+      low: 236,
+      close: 243,
+      volume: 110000000,
+    })
+  })
 })
