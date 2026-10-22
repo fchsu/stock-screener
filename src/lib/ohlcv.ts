@@ -173,3 +173,61 @@ export function calculateSupportBoundary(weeklyBars: OHLCVBar[]): number | null 
   const fallback = validBoundaries.find((b) => currentBodyBottom >= b)
   return fallback != null ? Number(fallback.toFixed(2)) : null
 }
+
+export interface BarLegendData {
+  open: number
+  high: number
+  low: number
+  close: number
+  change: number
+  changePercent: number
+  formattedVolume: string
+}
+
+/**
+ * 格式化成交量：台股以「張」（1,000 股）為單位，美股以「股」（帶 K, M, B 縮寫）為單位
+ */
+export function formatChartVolume(volume: number, market?: string): string {
+  if (!Number.isFinite(volume) || volume <= 0) {
+    return market === 'TWSE' ? '0 張' : '0 股'
+  }
+
+  if (market === 'TWSE') {
+    const lots = Math.round(volume / 1000)
+    return `${lots.toLocaleString('en-US')} 張`
+  }
+
+  if (volume >= 1_000_000_000) {
+    return `${(volume / 1_000_000_000).toFixed(2)}B 股`
+  }
+  if (volume >= 1_000_000) {
+    return `${(volume / 1_000_000).toFixed(2)}M 股`
+  }
+  if (volume >= 1_000) {
+    return `${(volume / 1_000).toFixed(2)}K 股`
+  }
+  return `${Math.round(volume).toLocaleString('en-US')} 股`
+}
+
+/**
+ * 計算單根 K 棒左上角圖例所需之開高低收、漲跌、漲跌%與格式化成交量
+ */
+export function computeBarLegendData(
+  bar: OHLCVBar,
+  prevBar: OHLCVBar | null | undefined,
+  market?: string
+): BarLegendData {
+  const basePrice = prevBar ? prevBar.close : bar.open
+  const change = Number((bar.close - basePrice).toFixed(2))
+  const changePercent = basePrice !== 0 ? Number(((change / basePrice) * 100).toFixed(2)) : 0
+
+  return {
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    change,
+    changePercent,
+    formattedVolume: formatChartVolume(bar.volume, market),
+  }
+}

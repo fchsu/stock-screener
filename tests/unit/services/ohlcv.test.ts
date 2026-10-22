@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../msw/server'
-import { parseYahooChartResponse, calculateSupportBoundary, type OHLCVBar } from '@/lib/ohlcv'
+import {
+  parseYahooChartResponse,
+  calculateSupportBoundary,
+  formatChartVolume,
+  computeBarLegendData,
+  type OHLCVBar,
+} from '@/lib/ohlcv'
 import { GET } from '@/app/api/ohlcv/route'
 
 describe('ohlcv utilities', () => {
@@ -153,5 +159,41 @@ describe('ohlcv utilities', () => {
     expect(capturedUserAgent).toBe('Mozilla/5.0')
     const json = await res.json()
     expect(json.bars).toHaveLength(1)
+  })
+
+  it('should format volume in 張 for TWSE and K/M/B 股 for US stocks', () => {
+    expect(formatChartVolume(12500000, 'TWSE')).toBe('12,500 張')
+    expect(formatChartVolume(1500, 'TWSE')).toBe('2 張')
+    expect(formatChartVolume(25400000, 'NASDAQ')).toBe('25.40M 股')
+    expect(formatChartVolume(15400, 'US')).toBe('15.40K 股')
+    expect(formatChartVolume(800, 'S&P 500')).toBe('800 股')
+  })
+
+  it('should compute OHLCV legend metrics including change and changePercent', () => {
+    const prevBar: OHLCVBar = {
+      time: 1700000000,
+      open: 98,
+      high: 102,
+      low: 97,
+      close: 100,
+      volume: 5000000,
+    }
+    const currBar: OHLCVBar = {
+      time: 1700086400,
+      open: 101,
+      high: 106,
+      low: 99.5,
+      close: 105,
+      volume: 8000000,
+    }
+
+    const metrics = computeBarLegendData(currBar, prevBar, 'TWSE')
+    expect(metrics.open).toBe(101)
+    expect(metrics.high).toBe(106)
+    expect(metrics.low).toBe(99.5)
+    expect(metrics.close).toBe(105)
+    expect(metrics.change).toBe(5)
+    expect(metrics.changePercent).toBeCloseTo(5.0)
+    expect(metrics.formattedVolume).toBe('8,000 張')
   })
 })

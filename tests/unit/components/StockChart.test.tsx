@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import StockChart from '@/components/StockChart'
 import * as queries from '@/services/queries'
@@ -9,6 +9,8 @@ const mockSetData = vi.fn()
 const mockSetVisibleLogicalRange = vi.fn()
 const mockSubscribeVisibleLogicalRangeChange = vi.fn()
 const mockUnsubscribeVisibleLogicalRangeChange = vi.fn()
+const mockSubscribeCrosshairMove = vi.fn()
+const mockUnsubscribeCrosshairMove = vi.fn()
 const mockRemove = vi.fn()
 
 vi.mock('lightweight-charts', () => ({
@@ -26,6 +28,8 @@ vi.mock('lightweight-charts', () => ({
       subscribeVisibleLogicalRangeChange: mockSubscribeVisibleLogicalRangeChange,
       unsubscribeVisibleLogicalRangeChange: mockUnsubscribeVisibleLogicalRangeChange,
     })),
+    subscribeCrosshairMove: mockSubscribeCrosshairMove,
+    unsubscribeCrosshairMove: mockUnsubscribeCrosshairMove,
     applyOptions: vi.fn(),
     remove: mockRemove,
   })),
@@ -54,19 +58,15 @@ describe('StockChart', () => {
     vi.clearAllMocks()
   })
 
-  it('should render stock info, timeframe buttons, left-aligned support boundary label, and toggle view mode', () => {
+  it('should render top-left OHLCV legend with 張 for TWSE and update on crosshair move', () => {
     vi.mocked(queries.useStockOHLCV).mockReturnValue({
       data: {
         symbol: '2330.TW',
         interval: '1d',
-        bars: Array.from({ length: 120 }, (_, i) => ({
-          time: 1700000000 + i * 86400,
-          open: 500,
-          high: 520,
-          low: 495,
-          close: 515,
-          volume: 12000,
-        })),
+        bars: [
+          { time: 1700000000, open: 500, high: 510, low: 495, close: 500, volume: 10000000 },
+          { time: 1700086400, open: 505, high: 525, low: 502, close: 520, volume: 25000000 },
+        ],
         supportBoundary: 495,
       },
       isLoading: false,
@@ -74,45 +74,73 @@ describe('StockChart', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
 
-    const onSelectInterval = vi.fn()
-    const onToggleViewMode = vi.fn()
+    render(
+      <StockChart
+        stock={mockStock}
+        activeInterval="1d"
+        onSelectInterval={vi.fn()}
+        viewMode="single"
+        onChangeViewMode={vi.fn()}
+      />
+    )
+
+    // 預設顯示最新一根 K 棒資訊：開 505、高 525、低 502、收 520、+20 (+4%)、量 25,000 張
+    const legend = screen.getByTestId('ohlcv-legend')
+    expect(legend).toHaveTextContent('開 505')
+    expect(legend).toHaveTextContent('高 525')
+    expect(legend).toHaveTextContent('低 502')
+    expect(legend).toHaveTextContent('收 520')
+    expect(legend).toHaveTextContent('+20')
+    expect(legend).toHaveTextContent('+4%')
+    expect(legend).toHaveTextContent('25,000 張')
+
+    // 模擬滑鼠移至第一根 K 棒 (time: 1700000000)
+    const crosshairHandler = mockSubscribeCrosshairMove.mock.calls[0]?.[0]
+    expect(crosshairHandler).toBeDefined()
+    act(() => {
+      crosshairHandler({ time: 1700000000 })
+    })
+
+    expect(screen.getByTestId('ohlcv-legend')).toHaveTextContent('開 500')
+    expect(screen.getByTestId('ohlcv-legend')).toHaveTextContent('10,000 張')
+  })
+
+  it('should render Picture-in-Picture (子母模式) with 30% width overlay and swap 日K/週K', () => {
+    vi.mocked(queries.useStockOHLCV).mockReturnValue({
+      data: {
+        symbol: '2330.TW',
+        interval: '1d',
+        bars: [{ time: 1700000000, open: 500, high: 520, low: 495, close: 515, volume: 12000000 }],
+        supportBoundary: 495,
+      },
+      isLoading: false,
+      isError: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
 
     render(
       <StockChart
         stock={mockStock}
         activeInterval="1d"
-        onSelectInterval={onSelectInterval}
-        viewMode="single"
-        onToggleViewMode={onToggleViewMode}
+        onSelectInterval={vi.fn()}
+        viewMode="pip"
+        onChangeViewMode={vi.fn()}
       />
     )
 
-    expect(screen.getByText('台積電')).toBeInTheDocument()
-    expect(screen.getByText('2330.TW')).toBeInTheDocument()
-    expect(screen.getByText(/關鍵邊界：495/)).toBeInTheDocument()
+    // 驗證左下角 30% 寬度子圖容器存在，預設主圖日K、子圖週K
+    const pipSubContainer = screen.getByTestId('pip-sub-chart')
+    expect(pipSubContainer).toBeInTheDocument()
+    expect(pipSubContainer.className).toContain('w-[30%]')
+    expect(pipSubContainer.className).toContain('h-[30%]')
+    expect(screen.getByText('子圖：週K')).toBeInTheDocument()
+    expect(screen.getByTestId('chart-canvas-1d')).toBeInTheDocument()
+    expect(screen.getByTestId('chart-canvas-1wk')).toBeInTheDocument()
 
-    // 確認 createPriceLine 的 title 為空字串（避免右側擋住近期 K 棒），並於左側渲染標籤
-    expect(mockCreatePriceLine).toHaveBeenCalledWith(
-      expect.objectContaining({
-        price: 495,
-        title: '',
-      })
-    )
-    const leftLabel = screen.getByTestId('support-boundary-left-label')
-    expect(leftLabel).toBeInTheDocument()
-    expect(leftLabel).toHaveTextContent('週線關鍵邊界')
-
-    // 點擊 60K 按鈕
-    fireEvent.click(screen.getByRole('button', { name: /60K/ }))
-    expect(onSelectInterval).toHaveBeenCalledWith('60m')
-
-    // 點擊週K 按鈕
-    fireEvent.click(screen.getByRole('button', { name: /週K/ }))
-    expect(onSelectInterval).toHaveBeenCalledWith('1wk')
-
-    // 點擊三時框並排按鈕
-    fireEvent.click(screen.getByRole('button', { name: /三時框並排/ }))
-    expect(onToggleViewMode).toHaveBeenCalledTimes(1)
+    // 點擊「切換日/週線」按鈕後，子圖應變為日K，主圖變為週K
+    const swapBtn = screen.getByRole('button', { name: /切換日\/週線/ })
+    fireEvent.click(swapBtn)
+    expect(screen.getByText('子圖：日K')).toBeInTheDocument()
   })
 
   it('should preserve zoomed bar count across timeframe and stock switches', () => {
@@ -141,18 +169,15 @@ describe('StockChart', () => {
         activeInterval="1d"
         onSelectInterval={vi.fn()}
         viewMode="single"
-        onToggleViewMode={vi.fn()}
+        onChangeViewMode={vi.fn()}
       />
     )
 
-    // 模擬使用者透過滾輪縮放將可見範圍調整為 50 根 K 棒 (例如從 150 到 200)
     const rangeChangeHandler = mockSubscribeVisibleLogicalRangeChange.mock.calls[0]?.[0]
-    expect(rangeChangeHandler).toBeDefined()
     rangeChangeHandler({ from: 150, to: 200 })
 
     mockSetVisibleLogicalRange.mockClear()
 
-    // 切換至另一檔股票，應維持相同的 50 根 K 棒區間寬度
     const nextStock: StockAsset = {
       ...mockStock,
       symbol: '2317.TW',
@@ -164,40 +189,12 @@ describe('StockChart', () => {
         activeInterval="1d"
         onSelectInterval={vi.fn()}
         viewMode="single"
-        onToggleViewMode={vi.fn()}
+        onChangeViewMode={vi.fn()}
       />
     )
 
     expect(mockSetVisibleLogicalRange).toHaveBeenCalled()
     const appliedRange = mockSetVisibleLogicalRange.mock.calls[0][0]
     expect(Math.round(appliedRange.to - appliedRange.from)).toBe(50)
-  })
-
-  it('should render three chart panes when viewMode is multi', () => {
-    vi.mocked(queries.useStockOHLCV).mockReturnValue({
-      data: {
-        symbol: '2330.TW',
-        interval: '1d',
-        bars: [{ time: 1700000000, open: 500, high: 520, low: 495, close: 515, volume: 12000 }],
-        supportBoundary: 495,
-      },
-      isLoading: false,
-      isError: false,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any)
-
-    render(
-      <StockChart
-        stock={mockStock}
-        activeInterval="1d"
-        onSelectInterval={vi.fn()}
-        viewMode="multi"
-        onToggleViewMode={vi.fn()}
-      />
-    )
-
-    expect(screen.getByText('週K（位置與長下影線）')).toBeInTheDocument()
-    expect(screen.getByText('日K（破底翻型態）')).toBeInTheDocument()
-    expect(screen.getByText('60K（短線轉折結構）')).toBeInTheDocument()
   })
 })

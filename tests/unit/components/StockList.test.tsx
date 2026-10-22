@@ -77,7 +77,11 @@ describe('StockList (Sidebar + Chart Workspace)', () => {
 
     render(<StockList date="2026-04-17" />)
 
-    // 驗證側邊欄兩個群組標題（標準圖、慣性改變）
+    // 驗證側邊欄兩個群組標題（標準圖、慣性改變）且具備 sticky top-0 固定置頂樣式
+    const stickyHeaders = screen.getAllByTestId('sticky-group-header')
+    expect(stickyHeaders).toHaveLength(2)
+    expect(stickyHeaders[0].className).toContain('sticky')
+    expect(stickyHeaders[0].className).toContain('top-0')
     expect(screen.getAllByText(/標準圖/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/慣性改變/).length).toBeGreaterThan(0)
 
@@ -93,9 +97,18 @@ describe('StockList (Sidebar + Chart Workspace)', () => {
     expect(screen.getAllByText('NVIDIA Corporation').length).toBeGreaterThan(0)
     expect(screen.getAllByText('NVDA').length).toBeGreaterThan(0)
     expect(screen.getByText('前一交易日數據（當日尚未開盤）')).toBeInTheDocument()
+
+    // 使用鍵盤左方向鍵 (ArrowLeft) 切換回台股，再用右方向鍵 (ArrowRight) 切換至美股
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(screen.getByText('當日數據')).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(screen.getByText('前一交易日數據（當日尚未開盤）')).toBeInTheDocument()
   })
 
-  it('should switch selected stock in chart when clicking another item or pressing ArrowDown', () => {
+  it('should switch selected stock and scroll it into view when pressing ArrowDown', () => {
+    const scrollIntoViewMock = vi.fn()
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock
     const multiTwseResults = [
       {
         id: 'mock-uuid-1',
@@ -137,9 +150,11 @@ describe('StockList (Sidebar + Chart Workspace)', () => {
 
     expect(screen.getAllByText(/資料基準日：2026-10-01/).length).toBeGreaterThan(0)
 
-    // 點擊側邊欄的「中鴻」切換 K 線圖標的
-    const stockItem = screen.getByRole('button', { name: /中鴻/ })
-    fireEvent.click(stockItem)
+    scrollIntoViewMock.mockClear()
+
+    // 按下 ArrowDown 切換至下一檔「中鴻」，並確認自動捲動至可視區域
+    fireEvent.keyDown(window, { key: 'ArrowDown' })
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest' })
 
     const tvLink = screen.getByRole('link', { name: /在 TradingView 開啟/i })
     expect(tvLink).toHaveAttribute(

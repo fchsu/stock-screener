@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useScreeningResult } from '@/services/queries'
-import StockChart from '@/components/StockChart'
+import StockChart, { type ChartViewMode } from '@/components/StockChart'
 import type { StockAsset, ScreeningResult } from '@/lib/types'
 import type { ChartInterval } from '@/lib/ohlcv'
 import { getTaiwanDate } from '@/lib/utils'
@@ -20,7 +20,7 @@ export default function StockList({
   const [activeMarket, setActiveMarket] = useState<ActiveMarketTab>('TWSE')
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
   const [activeInterval, setActiveInterval] = useState<ChartInterval>('1d')
-  const [viewMode, setViewMode] = useState<'single' | 'multi'>('single')
+  const [viewMode, setViewMode] = useState<ChartViewMode>('single')
 
   const twseResult = useMemo(() => data?.find((item) => item.market === 'TWSE'), [data])
   const usResult = useMemo(
@@ -50,7 +50,7 @@ export default function StockList({
     return orderedAssets[0]
   }, [orderedAssets, selectedSymbol])
 
-  // 支援鍵盤快捷鍵：上下鍵切換股票、1/2/3 切換 60K/日K/週K
+  // 支援鍵盤快捷鍵：上下鍵切換股票、左右鍵切換台股/美股、1/2/3 切換 60K/日K/週K
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
@@ -60,17 +60,24 @@ export default function StockList({
 
       if (e.key === '1') {
         setActiveInterval('60m')
-        setViewMode('single')
+        if (viewMode === 'multi') setViewMode('single')
         return
       }
       if (e.key === '2') {
         setActiveInterval('1d')
-        setViewMode('single')
+        if (viewMode === 'multi') setViewMode('single')
         return
       }
       if (e.key === '3') {
         setActiveInterval('1wk')
-        setViewMode('single')
+        if (viewMode === 'multi') setViewMode('single')
+        return
+      }
+
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        setActiveMarket((prev) => (prev === 'TWSE' ? 'US' : 'TWSE'))
+        setSelectedSymbol(null)
         return
       }
 
@@ -89,7 +96,7 @@ export default function StockList({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [orderedAssets, selectedStock])
+  }, [orderedAssets, selectedStock, viewMode])
 
   if (isLoading) {
     return <div className="p-4 text-center text-gray-500">載入中...</div>
@@ -210,50 +217,53 @@ export default function StockList({
           {tradingDate && <span>資料基準日：{tradingDate}</span>}
         </div>
 
-        {/* 清單內容區（唯一垂直捲動區） */}
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2.5">
+        {/* 清單內容區（唯一垂直捲動區，scroll-pt-8 避免向上切換時被 sticky 群組標題遮擋） */}
+        <div className="relative min-h-0 flex-1 scroll-pt-8 space-y-2 overflow-y-auto px-2.5 pb-2.5">
           {!currentResult && (
-            <div className="rounded-lg bg-gray-50 p-4 text-center text-sm text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
+            <div className="mt-2.5 rounded-lg bg-gray-50 p-4 text-center text-sm text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
               無此市場篩選紀錄
             </div>
           )}
 
           {currentResult?.status === 'fetching' && (
-            <div className="rounded-lg bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+            <div className="mt-2.5 rounded-lg bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
               資料抓取中...
             </div>
           )}
 
           {currentResult?.status === 'failed' && (
-            <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+            <div className="mt-2.5 rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
               抓取失敗
             </div>
           )}
 
           {currentResult?.status === 'closed' && (
-            <div className="rounded-lg bg-yellow-50 p-4 text-sm text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">
+            <div className="mt-2.5 rounded-lg bg-yellow-50 p-4 text-sm text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">
               {closedNotice}
             </div>
           )}
 
           {currentResult?.status === 'completed' && orderedAssets.length === 0 && (
-            <div className="rounded-lg bg-gray-50 p-4 text-center text-sm text-gray-500 dark:bg-gray-800/50 dark:text-gray-400">
+            <div className="mt-2.5 rounded-lg bg-gray-50 p-4 text-center text-sm text-gray-500 dark:bg-gray-800/50 dark:text-gray-400">
               無符合條件的股票
             </div>
           )}
 
           {currentResult?.status === 'completed' && orderedAssets.length > 0 && (
             <>
-              {/* 群組 1：標準圖 */}
+              {/* 群組 1：標準圖（群組範圍內 sticky top-0，滑至下一群組時自動替換） */}
               <div>
-                <div className="mb-1.5 flex items-center justify-between px-1">
-                  <h3 className="text-xs font-bold tracking-wider text-gray-500 uppercase dark:text-gray-400">
+                <div
+                  data-testid="sticky-group-header"
+                  className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white/95 px-1 py-1.5 backdrop-blur-xs dark:border-gray-800/80 dark:bg-gray-950/95"
+                >
+                  <h3 className="text-xs font-bold tracking-wider text-gray-600 uppercase dark:text-gray-300">
                     🎯 標準圖
                   </h3>
                   <span className="text-xs font-medium text-gray-400">{strictAssets.length}</span>
                 </div>
                 {strictAssets.length > 0 ? (
-                  <ul className="space-y-1">
+                  <ul className="mt-1 space-y-1">
                     {strictAssets.map((stock) => (
                       <StockSidebarRow
                         key={stock.symbol}
@@ -264,22 +274,25 @@ export default function StockList({
                     ))}
                   </ul>
                 ) : (
-                  <div className="rounded-lg border border-dashed border-gray-200 px-3 py-2 text-center text-xs text-gray-400 dark:border-gray-800">
+                  <div className="mt-1 rounded-lg border border-dashed border-gray-200 px-3 py-2 text-center text-xs text-gray-400 dark:border-gray-800">
                     無完全符合標準圖的標的
                   </div>
                 )}
               </div>
 
-              {/* 群組 2：慣性改變 */}
+              {/* 群組 2：慣性改變（群組範圍內 sticky top-0，僅固定當前顯示中的群組標題） */}
               <div>
-                <div className="mb-1.5 flex items-center justify-between px-1">
-                  <h3 className="text-xs font-bold tracking-wider text-gray-500 uppercase dark:text-gray-400">
+                <div
+                  data-testid="sticky-group-header"
+                  className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white/95 px-1 py-1.5 backdrop-blur-xs dark:border-gray-800/80 dark:bg-gray-950/95"
+                >
+                  <h3 className="text-xs font-bold tracking-wider text-gray-600 uppercase dark:text-gray-300">
                     🌊 慣性改變
                   </h3>
                   <span className="text-xs font-medium text-gray-400">{momentumAssets.length}</span>
                 </div>
                 {momentumAssets.length > 0 ? (
-                  <ul className="space-y-1">
+                  <ul className="mt-1 space-y-1">
                     {momentumAssets.map((stock) => (
                       <StockSidebarRow
                         key={stock.symbol}
@@ -290,7 +303,7 @@ export default function StockList({
                     ))}
                   </ul>
                 ) : (
-                  <div className="rounded-lg border border-dashed border-gray-200 px-3 py-2 text-center text-xs text-gray-400 dark:border-gray-800">
+                  <div className="mt-1 rounded-lg border border-dashed border-gray-200 px-3 py-2 text-center text-xs text-gray-400 dark:border-gray-800">
                     無僅符合慣性改變的標的
                   </div>
                 )}
@@ -302,10 +315,12 @@ export default function StockList({
         {/* 底部操作提示 */}
         <div className="shrink-0 border-t border-gray-100 px-3 py-1.5 text-[11px] text-gray-400 dark:border-gray-800/80">
           快捷鍵：<kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">↑</kbd>{' '}
-          <kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">↓</kbd> 切換股票 ·{' '}
+          <kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">↓</kbd> 選股 ·{' '}
+          <kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">←</kbd>{' '}
+          <kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">→</kbd> 台/美 ·{' '}
           <kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">1</kbd>{' '}
           <kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">2</kbd>{' '}
-          <kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">3</kbd> 切換時框
+          <kbd className="rounded bg-gray-100 px-1 dark:bg-gray-800">3</kbd> 時框
         </div>
       </aside>
 
@@ -317,10 +332,10 @@ export default function StockList({
             activeInterval={activeInterval}
             onSelectInterval={(interval) => {
               setActiveInterval(interval)
-              setViewMode('single')
+              if (viewMode === 'multi') setViewMode('single')
             }}
             viewMode={viewMode}
-            onToggleViewMode={() => setViewMode((prev) => (prev === 'single' ? 'multi' : 'single'))}
+            onChangeViewMode={setViewMode}
           />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white/50 p-8 text-center text-gray-500 dark:border-gray-800 dark:bg-gray-950/50">
@@ -341,9 +356,18 @@ function StockSidebarRow({
   isSelected: boolean
   onSelect: () => void
 }) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (isSelected) {
+      buttonRef.current?.scrollIntoView?.({ block: 'nearest' })
+    }
+  }, [isSelected])
+
   return (
-    <li>
+    <li className="scroll-mt-8">
       <button
+        ref={buttonRef}
         type="button"
         onClick={onSelect}
         className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
