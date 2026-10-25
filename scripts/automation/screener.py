@@ -287,12 +287,13 @@ def fetch_and_screen_us():
                 
                 stats["valid_history"] += 1
                 close_price = df_ticker['Close'].iloc[-1]
-                volume = df_ticker['Volume'].iloc[-1]
-                
-                # 前置過濾：股價 >= 10 且成交量 >= 1M
-                if pd.isna(close_price) or pd.isna(volume):
+                # 用 20 日均量而非單日量：破底翻右腳常是量縮回測，看單日量會剛好把最好的進場點刷掉
+                avg_volume = df_ticker['Volume'].tail(20).mean()
+
+                # 前置過濾：股價 >= 10 且 20 日均量 >= 500K
+                if pd.isna(close_price) or pd.isna(avg_volume):
                     continue
-                if close_price < 10 or volume < 1000000:
+                if close_price < 10 or avg_volume < 500000:
                     continue
                     
                 stats["pre_filter"] += 1

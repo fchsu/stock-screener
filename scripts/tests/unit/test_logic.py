@@ -87,11 +87,38 @@ def test_evaluate_trend_reversal_criteria_fail_pattern_missing_p4():
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100, missing_p4=True)
     assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'momentum'
 
-def test_evaluate_trend_reversal_criteria_fail_pattern_p4_p5_out_of_range():
+@pytest.mark.parametrize('p4', [106, 135])
+def test_evaluate_trend_reversal_criteria_pass_regardless_of_p4_p5_ratio(p4):
+    # 已拿掉 (P4-P5)/(P2-P3) 介於 0.25~0.75 的限制：
+    # 106 -> 比例 0.15（反彈很小）；135 -> 比例 0.875（P4 突破 P2，型態更強）
     weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
-    # P4-P5 = 110 - 105 = 5. P2-P3 = 40. 40 * 0.25 = 10. 5 < 10. (Fail)
-    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=105)
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=p4, p5=100)
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'strict'
+
+def test_evaluate_trend_reversal_criteria_fail_if_p3_barely_breaks_p1():
+    # BFAM 09/30 的情境：P3 只比 P1 低一點點，比較像雙底，不算破底翻
+    weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=99.5, p4=110, p5=100)
     assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'momentum'
+
+def test_evaluate_trend_reversal_criteria_fail_if_p3_barely_breaks_p5():
+    # P3 明顯低於 P1，但右腳 P5 回落到幾乎貼著 P3，破底後沒有真正翻上來
+    weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
+    daily_data = create_mock_daily_data_pattern(p1=99, p2=120, p3=97, p4=108, p5=97.5)
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'momentum'
+
+def test_evaluate_trend_reversal_criteria_fail_if_p5_clearly_below_p1():
+    # FOX 10/14 的情境：P5 比 P1 低 2.9%（在 3% 內），但高低點一路往下是下降階梯
+    # mock 的 ATR 約 6.6，P1-P5=2.9 > 0.25 ATR
+    weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=97.1)
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'momentum'
+
+def test_evaluate_trend_reversal_criteria_pass_if_p5_slightly_below_p1():
+    # P5 只比 P1 低 1（< 0.25 ATR），算右腳站回左腳附近
+    weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=99)
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'strict'
 
 def test_evaluate_trend_reversal_criteria_pass_on_previous_week_completed_bar():
     # 上週 (iloc[-2]) 符合條件，而當週 (iloc[-1]) 剛開盤無下影線且未跌破

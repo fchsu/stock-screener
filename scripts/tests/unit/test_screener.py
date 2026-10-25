@@ -169,7 +169,7 @@ def test_fetch_and_screen_us(mock_get, mock_get_target_info, mock_check_us, mock
         mock_yf_data[(col, "AAPL")] = passing_data[col]
         mock_yf_data[(col, "MSFT")] = passing_data[col]
         if col == "Volume":
-            mock_yf_data[(col, "MSFT")] = 500000
+            mock_yf_data[(col, "MSFT")] = 400000
 
     mock_download.return_value = mock_yf_data
 
@@ -178,6 +178,48 @@ def test_fetch_and_screen_us(mock_get, mock_get_target_info, mock_check_us, mock
     assert len(results) == 1
     assert results[0]["symbol"] == "AAPL"
     assert results[0]["tradingDate"] == latest_date_str
+
+
+@patch("automation.screener.evaluate_trend_reversal_criteria")
+@patch("automation.screener.yf.download")
+@patch("automation.screener.pd.read_html")
+@patch("automation.screener.check_us_market_open")
+@patch("automation.screener.get_us_target_info")
+@patch("automation.screener.requests.get")
+def test_fetch_and_screen_us_uses_20d_avg_volume(
+    mock_get, mock_get_target_info, mock_check_us, mock_read_html, mock_download, mock_evaluate
+):
+    # BFAM 09/30 的情境：破底翻右腳量縮，當日量 < 1M，但 20 日均量仍夠
+    passing_data = create_passing_daily_data()
+    latest_date_str = passing_data.index[-1].strftime("%Y-%m-%d")
+    mock_get_target_info.return_value = (latest_date_str, False)
+    mock_check_us.return_value = True
+    mock_evaluate.return_value = "strict"
+    mock_get.return_value = MagicMock(text="<html>dummy</html>")
+    mock_read_html.return_value = [pd.DataFrame({"Symbol": ["BFAM", "THIN"]})]
+
+    columns = pd.MultiIndex.from_tuples(
+        [(col, t) for t in ["BFAM", "THIN"] for col in ["Open", "High", "Low", "Close", "Volume"]]
+    )
+    mock_yf_data = pd.DataFrame(index=passing_data.index, columns=columns)
+    for t in ["BFAM", "THIN"]:
+        for col in ["Open", "High", "Low", "Close"]:
+            mock_yf_data[(col, t)] = passing_data[col]
+
+    bfam_vol = pd.Series(900000, index=passing_data.index)
+    bfam_vol.iloc[-1] = 600000
+    mock_yf_data[("Volume", "BFAM")] = bfam_vol
+
+    # 平常沒量、只有最後一天爆量的股票不該因為單日量被放行
+    thin_vol = pd.Series(100000, index=passing_data.index)
+    thin_vol.iloc[-1] = 3000000
+    mock_yf_data[("Volume", "THIN")] = thin_vol
+
+    mock_download.return_value = mock_yf_data
+
+    results = fetch_and_screen_us()
+
+    assert [r["symbol"] for r in results] == ["BFAM"]
 
 @patch("automation.screener.check_us_market_open")
 def test_fetch_and_screen_us_closed(mock_check_us):

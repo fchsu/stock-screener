@@ -27,13 +27,22 @@ def get_swing_points(highs, lows, window=2):
             
     return swing_highs, swing_lows
 
+def calc_atr(df: pd.DataFrame, period=14) -> float:
+    """最近 period 根 K 棒的平均真實波幅，含跳空缺口（用前一根收盤補算）"""
+    prev_close = df['Close'].shift()
+    tr = pd.concat(
+        [df['High'] - df['Low'], (df['High'] - prev_close).abs(), (df['Low'] - prev_close).abs()],
+        axis=1,
+    ).max(axis=1)
+    return tr.tail(period).mean()
+
 def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.DataFrame) -> str:
     """
     實作老余三問篩選邏輯：
     1. 位置：判斷週線處於下邊界（當前價格落在過去 200 週價格區間的底部 10% 以內）。
     2. 慣性：判斷週線 K 棒出現長下影線（下影線長度大於實體與上影線總和）。
     3. 圖（破底翻）：定義為呈現 P0 - P5 波動，且 P5 與 P1 的價格落差需在 3% 以內，
-       且 P5 距離 P3 的價格空間需落在前波跌幅的 25% 到 75% 之間。
+       且 P3 需比 P1、P5 低至少 0.5 個 ATR(14)，P5 不可比 P1 低超過 0.25 個 ATR(14)。
     """
     if daily_data is None or len(daily_data) < 60:
         return 'none'
@@ -170,20 +179,20 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
     if p5 < p3:
         return 'momentum'
 
+    # 條件 3-0b: P3 必須明顯低於 P1 與 P5（至少 0.5 個 ATR），只差一點點的是雙底而不是破底翻
+    atr = calc_atr(recent, 14)
+    if min(p1, p5) - p3 < atr * 0.5:
+        return 'momentum'
+
+    # 條件 3-0c: 右腳要站回左腳附近，P5 明顯低於 P1（超過 0.25 ATR）是下降階梯不是破底翻
+    if p1 - p5 > atr * 0.25:
+        return 'momentum'
+
     # 條件 3-1: P5 與 P1 的價格落差需在 3% 以內
     p1_p5_diff_ratio = abs(p5 - p1) / p1
     if p1_p5_diff_ratio > 0.03:
         return 'momentum'
-        
-    # 條件 3-2: (P2 - P3) * 0.25 <= (P4 - P5) <= (P2 - P3) * 0.75
-    p2_p3_drop = p2 - p3
-    if p2_p3_drop <= 0:
-        return 'momentum'
-        
-    p4_p5_space = p4 - p5
-    if (p4 - p5) < p2_p3_drop * 0.25 or (p4 - p5) > p2_p3_drop * 0.75:
-        return 'momentum'
-        
+
     # 條件 3-3: 止跌確認 (若 P5 為最新一根日 K，不可為實體大黑棒收在當日最低點)
     last_bar = recent.iloc[-1]
     bar_range = last_bar['High'] - last_bar['Low']
