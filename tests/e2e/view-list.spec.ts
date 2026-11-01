@@ -44,8 +44,8 @@ test.describe('US1: View Daily Screening Results (Sidebar + K-Line Chart)', () =
     // 驗證側邊欄兩個群組標題
     const sidebar = page.locator('aside')
     await expect(sidebar).toBeVisible()
-    await expect(sidebar.getByText(/標準圖/)).toBeVisible()
-    await expect(sidebar.getByText(/慣性改變/)).toBeVisible()
+    await expect(sidebar.getByRole('heading', { name: /標準圖/ })).toBeVisible()
+    await expect(sidebar.getByRole('heading', { name: /慣性改變/ })).toBeVisible()
 
     // 驗證預設台股資料與右側 K 線圖工具列
     await expect(sidebar.getByText('2330.TW')).toBeVisible()
@@ -56,7 +56,7 @@ test.describe('US1: View Daily Screening Results (Sidebar + K-Line Chart)', () =
     await expect(chartSection.getByRole('button', { name: /日K/ })).toBeVisible()
     await expect(chartSection.getByRole('button', { name: /週K/ })).toBeVisible()
 
-    const tsmcLink = chartSection.getByRole('link', { name: /TradingView/i })
+    const tsmcLink = chartSection.getByRole('link', { name: /在 TradingView 開啟/i })
     await expect(tsmcLink).toHaveAttribute(
       'href',
       'https://www.tradingview.com/chart/?symbol=TWSE:2330'

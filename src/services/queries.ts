@@ -22,36 +22,40 @@ export const fetchMultiDateScreeningResultsServer = async (
   dates: string[]
 ): Promise<Record<string, ScreeningResult[]>> => {
   if (!dates.length) return {}
-  const { data, error } = await supabase.from('screening_results').select('*').in('date', dates)
+  try {
+    const { data, error } = await supabase.from('screening_results').select('*').in('date', dates)
 
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  const grouped: Record<string, ScreeningResult[]> = {}
-  for (const d of dates) {
-    grouped[d] = []
-  }
-  const items = (data || []) as unknown as ScreeningResult[]
-  for (const item of items) {
-    if (grouped[item.date]) {
-      grouped[item.date].push(item)
-    } else {
-      grouped[item.date] = [item]
+    if (error) {
+      return {}
     }
-  }
 
-  // 測試環境中若 mock 資料的 date 固定為特定歷史日，提供容錯回退
-  if (items.length > 0 && dates.length > 0 && grouped[dates[0]].length === 0) {
-    const hasAnyMatched = dates.some((d) => (grouped[d] || []).length > 0)
-    if (!hasAnyMatched) {
-      for (const d of dates) {
-        grouped[d] = items
+    const grouped: Record<string, ScreeningResult[]> = {}
+    for (const d of dates) {
+      grouped[d] = []
+    }
+    const items = (data || []) as unknown as ScreeningResult[]
+    for (const item of items) {
+      if (grouped[item.date]) {
+        grouped[item.date].push(item)
+      } else {
+        grouped[item.date] = [item]
       }
     }
-  }
 
-  return grouped
+    // 測試環境中若 mock 資料的 date 固定為特定歷史日，提供容錯回退
+    if (items.length > 0 && dates.length > 0 && grouped[dates[0]].length === 0) {
+      const hasAnyMatched = dates.some((d) => (grouped[d] || []).length > 0)
+      if (!hasAnyMatched) {
+        for (const d of dates) {
+          grouped[d] = items
+        }
+      }
+    }
+
+    return grouped
+  } catch {
+    return {}
+  }
 }
 
 // React Query Hook
@@ -60,7 +64,7 @@ export const useScreeningResult = (date: string, initialData?: ScreeningResult[]
     queryKey: ['screeningResults', date],
     queryFn: () => fetchScreeningResults(date),
     staleTime: 1000 * 60 * 5, // 5分鐘內不重新請求
-    initialData,
+    initialData: initialData && initialData.length > 0 ? initialData : undefined,
   })
 }
 

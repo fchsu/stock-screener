@@ -36,6 +36,36 @@ vi.mock('@/services/queries', () => ({
   })),
 }))
 
+vi.mock('@/services/watchlist-queries', () => ({
+  useWatchlists: vi.fn(() => ({
+    data: [
+      {
+        id: 'wl-1',
+        user_id: 'u-1',
+        name: '自選一',
+        sort_order: 0,
+        created_at: '',
+        updated_at: '',
+        groups: [],
+        items: [],
+      },
+    ],
+    isLoading: false,
+  })),
+  useWatchlistMutations: vi.fn(() => ({
+    createWatchlist: { mutate: vi.fn(), mutateAsync: vi.fn() },
+    renameWatchlist: { mutate: vi.fn() },
+    deleteWatchlist: { mutate: vi.fn() },
+    createGroup: { mutate: vi.fn() },
+    renameGroup: { mutate: vi.fn() },
+    deleteGroup: { mutate: vi.fn() },
+    addItem: { mutate: vi.fn() },
+    removeItem: { mutate: vi.fn() },
+    reorderGroups: { mutate: vi.fn() },
+    moveOrReorderItem: { mutate: vi.fn() },
+  })),
+}))
+
 describe('StockList (Sidebar + Chart Workspace)', () => {
   it('should display loading state', () => {
     vi.mocked(queries.useScreeningResult).mockReturnValue({
@@ -233,5 +263,62 @@ describe('StockList (Sidebar + Chart Workspace)', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /美股/ }))
     expect(screen.getByText('前一交易日休市（未開盤交易，週末或美國國定假日）')).toBeInTheDocument()
+  })
+
+  it('hides watchlist tab and + buttons when unauthenticated, and shows them + switches chart on clicking + when authenticated', () => {
+    const multiTwseResults = [
+      {
+        id: 'mock-uuid-1',
+        date: '2026-10-01',
+        market: 'TWSE' as const,
+        status: 'completed' as const,
+        assets: [
+          {
+            symbol: '2330.TW',
+            name: '台積電',
+            market: 'TWSE' as const,
+            matchLevel: 'strict',
+            tradingViewUrl: 'https://tw.tradingview.com/chart/eEagIIPe/?symbol=TWSE:2330',
+            tradingDate: '2026-10-01',
+          },
+          {
+            symbol: '2014.TW',
+            name: '中鴻',
+            market: 'TWSE' as const,
+            matchLevel: 'momentum',
+            tradingViewUrl: 'https://tw.tradingview.com/chart/eEagIIPe/?symbol=TWSE:2014',
+            tradingDate: '2026-10-01',
+          },
+        ],
+        updated_at: '2026-10-01T07:00:00Z',
+      },
+    ]
+
+    vi.mocked(queries.useScreeningResult).mockReturnValue({
+      data: multiTwseResults,
+      isLoading: false,
+      isError: false,
+      error: null,
+      isSuccess: true,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    const { rerender } = render(<StockList date="2026-10-01" user={null} />)
+
+    // 未登入時不顯示觀察清單 Tab 與 + 按鈕
+    expect(screen.queryByRole('tab', { name: /清單/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /加入觀察清單/ })).not.toBeInTheDocument()
+
+    // 登入後顯示 ★ 清單 Tab 與每檔標的右側 + 按鈕
+    rerender(<StockList date="2026-10-01" user={{ id: 'u-1', email: 'owner@example.com' }} />)
+    expect(screen.getByRole('tab', { name: /清單/ })).toBeInTheDocument()
+
+    // 點擊第二檔「中鴻」右側的 + 按鈕，應同時將右側 K 線圖切換為 2014.TW
+    fireEvent.click(screen.getByRole('button', { name: /加入觀察清單：中鴻/ }))
+    const tvLink = screen.getByRole('link', { name: /在 TradingView 開啟/i })
+    expect(tvLink).toHaveAttribute(
+      'href',
+      'https://tw.tradingview.com/chart/eEagIIPe/?symbol=TWSE:2014'
+    )
   })
 })

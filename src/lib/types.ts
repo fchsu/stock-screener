@@ -1,1 +1,10 @@
-export type { MarketType, ScreeningStatus, StockAsset, ScreeningResult } from './database.types'
+export type {
+  MarketType,
+  ScreeningStatus,
+  StockAsset,
+  ScreeningResult,
+  Watchlist,
+  WatchlistGroup,
+  WatchlistItem,
+  WatchlistWithDetails,
+} from './database.types'

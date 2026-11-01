@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import DateNav from '@/components/DateNav'
 import StockList from '@/components/StockList'
+import AuthHeaderControl from '@/components/AuthHeaderControl'
+import { useAuth } from '@/services/auth'
 import type { ScreeningResult } from '@/lib/types'
 import { getTaiwanDate } from '@/lib/utils'
 
@@ -18,12 +20,15 @@ export default function ScreenerDashboard({
 }: ScreenerDashboardProps) {
   const [offset, setOffset] = useState(initialOffset)
   const queryClient = useQueryClient()
+  const { user, isLoading: isAuthLoading, signIn, signOut } = useAuth()
 
   // 將伺服器預取的 5 天資料注入 React Query 快取，達成 0 延遲切換
   useEffect(() => {
     if (initialMultiData) {
       Object.entries(initialMultiData).forEach(([dateStr, results]) => {
-        queryClient.setQueryData(['screeningResults', dateStr], results)
+        if (results && results.length > 0) {
+          queryClient.setQueryData(['screeningResults', dateStr], results)
+        }
       })
     }
   }, [initialMultiData, queryClient])
@@ -65,16 +70,25 @@ export default function ScreenerDashboard({
           <DateNav currentOffset={offset} onSelectOffset={handleSelectOffset} />
         </div>
 
-        <div className="hidden items-center gap-2 text-[11px] text-gray-500 xl:flex dark:text-gray-400">
-          <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 dark:border-gray-800 dark:bg-gray-900">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-            <span>每日 15:15 排程</span>
-          </span>
-          <span>台股採當日收盤 · 美股採前一交易日收盤</span>
+        <div className="flex items-center gap-3">
+          <div className="hidden items-center gap-2 text-[11px] text-gray-500 xl:flex dark:text-gray-400">
+            <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 dark:border-gray-800 dark:bg-gray-900">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+              <span>每日 15:15 排程</span>
+            </span>
+            <span>台股採當日收盤 · 美股採前一交易日收盤</span>
+          </div>
+
+          <AuthHeaderControl
+            user={user}
+            isLoading={isAuthLoading}
+            onSignIn={signIn}
+            onSignOut={signOut}
+          />
         </div>
       </header>
 
-      <StockList date={currentDateStr} initialData={initialMultiData[currentDateStr]} />
+      <StockList date={currentDateStr} initialData={initialMultiData[currentDateStr]} user={user} />
     </div>
   )
 }
