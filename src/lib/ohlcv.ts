@@ -169,7 +169,10 @@ export function calculateSupportBoundary(weeklyBars: OHLCVBar[]): number | null 
       continue
     }
     for (let j = i - 1; j >= 0; j--) {
-      const [, priceB] = swingLows[j]
+      const [idxB, priceB] = swingLows[j]
+      if (idxA - idxB < 5) {
+        continue
+      }
       const maxAb = Math.max(priceA, priceB)
       if (maxAb > 0 && Math.abs(priceA - priceB) / maxAb <= 0.05) {
         validBoundariesSet.add(Math.min(priceA, priceB))
@@ -185,9 +188,9 @@ export function calculateSupportBoundary(weeklyBars: OHLCVBar[]): number | null 
   const currentWeek = weeklyBars[n - 1]
   const currentBodyBottom = Math.min(currentWeek.open, currentWeek.close)
 
-  const candidateWeeks = [weeklyBars[n - 1]]
-  if (n >= 3) {
-    candidateWeeks.push(weeklyBars[n - 2])
+  const candidateWeeks: Array<[number, OHLCVBar]> = [[n - 1, weeklyBars[n - 1]]]
+  if (n >= 4) {
+    candidateWeeks.push([n - 2, weeklyBars[n - 2]])
   }
 
   for (const bLevel of validBoundaries) {
@@ -195,16 +198,30 @@ export function calculateSupportBoundary(weeklyBars: OHLCVBar[]): number | null 
       continue
     }
 
-    for (const w of candidateWeeks) {
-      if (w.high === w.low) continue
+    for (const [wIdx, w] of candidateWeeks) {
+      if (wIdx < 3 || w.high === w.low) continue
       const bodyBottom = Math.min(w.open, w.close)
       const lowerShadow = bodyBottom - w.low
       const totalRange = w.high - w.low
 
       if (lowerShadow / totalRange <= 0.5) continue
-      if (w.low < bLevel && bodyBottom >= bLevel) {
-        return Number(bLevel.toFixed(2))
+      if (!(w.low < bLevel && bodyBottom >= bLevel)) continue
+
+      const prevWeeks = weeklyBars.slice(wIdx - 3, wIdx)
+      const prevBodyBottoms = prevWeeks.map((p) => Math.min(p.open, p.close))
+      const prevCloses = prevWeeks.map((p) => p.close)
+      const prevLows = prevWeeks.map((p) => p.low)
+
+      if (prevBodyBottoms.some((b) => b < bLevel)) continue
+      if (w.low >= Math.min(...prevLows) || bodyBottom >= Math.max(...prevCloses)) continue
+      if (
+        (prevCloses[0] < prevCloses[1] && prevCloses[1] < prevCloses[2]) ||
+        (prevLows[0] < prevLows[1] && prevLows[1] < prevLows[2])
+      ) {
+        continue
       }
+
+      return Number(bLevel.toFixed(2))
     }
   }
 

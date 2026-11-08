@@ -78,6 +78,26 @@ describe('ohlcv utilities', () => {
     expect(boundary).toBe(100)
   })
 
+  it('should ignore weekly swing low pairs that are fewer than 5 weeks apart', () => {
+    const baseTime = 1700000000
+    const weekSec = 7 * 86400
+    const bars: OHLCVBar[] = Array.from({ length: 15 }, (_, i) => ({
+      time: baseTime + i * weekSec,
+      open: 115,
+      high: 120,
+      low: 110,
+      close: 116,
+      volume: 10000,
+    }))
+
+    // Swing Low 1 at index 5 (low = 100), Swing Low 2 at index 9 (distance = 4 < 5)
+    bars[5] = { ...bars[5], open: 108, high: 110, low: 100, close: 106 }
+    bars[9] = { ...bars[9], open: 108, high: 110, low: 101, close: 105 }
+    bars[14] = { ...bars[14], open: 102, high: 105, low: 95, close: 104 }
+
+    expect(calculateSupportBoundary(bars)).toBeNull()
+  })
+
   it('should return 400 when symbol is missing in GET /api/ohlcv', async () => {
     const req = new Request('http://localhost:3000/api/ohlcv?interval=1d')
     const res = await GET(req)

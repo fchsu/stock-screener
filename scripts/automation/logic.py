@@ -39,17 +39,29 @@ def calc_atr(df: pd.DataFrame, period=14) -> float:
 def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.DataFrame) -> str:
     """
     實作老余三問篩選邏輯：
-    1. 位置：判斷週線處於下邊界（當前價格落在過去 200 週價格區間的底部 10% 以內）。
-    2. 慣性：判斷週線 K 棒出現長下影線（下影線長度大於實體與上影線總和）。
+    1. 位置：判斷週線處於下邊界（當前價格落在過去 52 週價格區間的底部 30% 以內，且存在相隔 >= 5 週的雙底支撐邊界）。
+    2. 慣性：判斷週線由上往下回測關鍵邊界，且 K 棒出現長下影線（下影線長度大於總振幅的一半）。
     3. 圖（破底翻）：定義為呈現 P0 - P5 波動，且 P5 與 P1 的價格落差需在 3% 以內，
        且 P3 需比 P1、P5 低至少 0.5 個 ATR(14)，P5 不可比 P1 低超過 0.25 個 ATR(14)。
     """
     if daily_data is None or len(daily_data) < 60:
         return 'none'
-    if weekly_data is None or len(weekly_data) < 2:
+    if weekly_data is None or len(weekly_data) < 4:
         return 'none'
         
     # --- 1. 位置 (Position) ---
+    current_week = weekly_data.iloc[-1]
+    current_body_bottom = min(current_week['Open'], current_week['Close'])
+
+    # 條件 1-1: 區間下緣位階限制（處於近 1 年 52 週高低區間的底部 30% 以內）
+    recent_52w = weekly_data.tail(52)
+    high_52w = recent_52w['High'].max()
+    low_52w = recent_52w['Low'].min()
+    if high_52w <= low_52w:
+        return 'none'
+    if (current_week['Close'] - low_52w) / (high_52w - low_52w) > 0.30:
+        return 'none'
+
     w_lows = weekly_data['Low'].values
     w_highs = weekly_data['High'].values
     w_swing_highs, w_swing_lows = get_swing_points(w_highs, w_lows, window=2)
@@ -58,19 +70,21 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
         return 'none'
 
     sorted_sl = sorted(w_swing_lows, key=lambda x: x[0])
+    total_weeks = len(weekly_data)
 
-    # 候選測試週：當週 (iloc[-1]) 與 上週 (iloc[-2])，涵蓋剛收線與週中觀察
-    candidate_weeks = [weekly_data.iloc[-1]]
-    if len(weekly_data) >= 3:
-        candidate_weeks.append(weekly_data.iloc[-2])
+    # 候選測試週：預設僅檢查當週 (iloc[-1])；僅在週一、週二當週 K 棒未成形時才回看上週 (iloc[-2])
+    candidate_weeks = [(total_weeks - 1, weekly_data.iloc[-1])]
+    is_early_week = (
+        isinstance(daily_data.index, pd.DatetimeIndex)
+        and len(daily_data) > 0
+        and daily_data.index[-1].weekday() in (0, 1)
+    )
+    if is_early_week and total_weeks >= 4:
+        candidate_weeks.append((total_weeks - 2, weekly_data.iloc[-2]))
 
-    current_week = weekly_data.iloc[-1]
-    current_body_bottom = min(current_week['Open'], current_week['Close'])
-
-    # 尋找歷史形成的關鍵邊界 (任意兩點低點差距在 5% 以內，形成有效水平支撐帶)
+    # 尋找歷史形成的關鍵邊界 (任意兩點低點差距在 5% 以內，且兩點至少相隔 >= 5 週)
     valid_boundaries = []
     n_sl = len(sorted_sl)
-    total_weeks = len(weekly_data)
     for i in range(n_sl - 1, -1, -1):
         idx_a, price_a = sorted_sl[i]
         # A 點必須具備近時性：在過去 52 週內（近 1 年）或屬於最近 5 個 Swing Lows 之一
@@ -78,6 +92,8 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
             continue
         for j in range(i - 1, -1, -1):
             idx_b, price_b = sorted_sl[j]
+            if (idx_a - idx_b) < 5:
+                continue
             max_ab = max(price_a, price_b)
             if max_ab > 0 and abs(price_a - price_b) / max_ab <= 0.05:
                 valid_boundaries.append(min(price_a, price_b))
@@ -94,7 +110,9 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
         if current_body_bottom < b_level:
             continue
 
-        for w in candidate_weeks:
+        for w_idx, w in candidate_weeks:
+            if w_idx < 3:
+                continue
             w_open, w_close, w_high, w_low = w['Open'], w['Close'], w['High'], w['Low']
             if w_high == w_low:
                 continue
@@ -108,9 +126,26 @@ def evaluate_trend_reversal_criteria(daily_data: pd.DataFrame, weekly_data: pd.D
                 continue
 
             # 條件 2-2: 週線最低點跌破關鍵邊界，且實體底部站穩在關鍵邊界之上
-            if w_low < b_level and body_bottom >= b_level:
-                matched_boundary = b_level
-                break
+            if not (w_low < b_level and body_bottom >= b_level):
+                continue
+
+            # 條件 2-3: 必須歷經前幾根週 K 由上往下回踩關鍵邊界（排除由下往上突破或一路上漲趨勢）
+            prev_weeks = weekly_data.iloc[w_idx - 3 : w_idx]
+            prev_body_bottoms = prev_weeks[['Open', 'Close']].min(axis=1)
+            prev_closes = prev_weeks['Close'].values
+            prev_lows = prev_weeks['Low'].values
+
+            if (prev_body_bottoms < b_level).any():
+                continue
+            if w_low >= prev_lows.min() or body_bottom >= prev_closes.max():
+                continue
+            if (prev_closes[0] < prev_closes[1] < prev_closes[2]) or (
+                prev_lows[0] < prev_lows[1] < prev_lows[2]
+            ):
+                continue
+
+            matched_boundary = b_level
+            break
 
         if matched_boundary is not None:
             break

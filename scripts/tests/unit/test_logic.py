@@ -121,14 +121,26 @@ def test_evaluate_trend_reversal_criteria_pass_if_p5_slightly_below_p1():
     assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'strict'
 
 def test_evaluate_trend_reversal_criteria_pass_on_previous_week_completed_bar():
-    # 上週 (iloc[-2]) 符合條件，而當週 (iloc[-1]) 剛開盤無下影線且未跌破
+    # 週一或週二當週 K 棒未成形時，允許回看上週 (iloc[-2]) 符合條件，且當週 (iloc[-1]) 未跌破
     weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
-    # 追加一根尚未成形的當週 K 棒 (開高低收均在 55，無下影線且在邊界之上)
     incomplete_week = pd.DataFrame([{'Open': 55, 'High': 56, 'Low': 55, 'Close': 55}])
     weekly_data_extended = pd.concat([weekly_data, incomplete_week], ignore_index=True)
 
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
+    # 2026-11-03 為週二 (weekday=1)，應回看上週 iloc[-2] 並通過
+    daily_data.index = pd.date_range(end="2026-11-03", periods=len(daily_data), freq="B")
     assert evaluate_trend_reversal_criteria(daily_data, weekly_data_extended) == 'strict'
+
+def test_evaluate_trend_reversal_criteria_fail_on_previous_week_when_late_week():
+    # 週三至週五（如 11/06 週五，00753L / 00752 案例）當週 K 棒已成形但無長下影線，不可再回看上週 iloc[-2]
+    weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
+    completed_current_week = pd.DataFrame([{'Open': 55, 'High': 56, 'Low': 55, 'Close': 55}])
+    weekly_data_extended = pd.concat([weekly_data, completed_current_week], ignore_index=True)
+
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
+    # 2026-11-06 為週五 (weekday=4)，不回看 iloc[-2]，應回傳 none
+    daily_data.index = pd.date_range(end="2026-11-06", periods=len(daily_data), freq="B")
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data_extended) == 'none'
 
 def test_evaluate_trend_reversal_criteria_fail_if_current_week_body_broken():
     # 上週 (iloc[-2]) 假跌破，但當週 (iloc[-1]) 實體收在 48，已真正跌破關鍵邊界 50
@@ -257,6 +269,48 @@ def test_evaluate_trend_reversal_criteria_fail_if_boundaries_are_purely_ancient(
     daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
 
     # 由於遠古低點被過濾，無有效邊界，應回傳 none
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'none'
+
+def test_evaluate_trend_reversal_criteria_fail_if_above_52w_bottom_30_percent():
+    # 測試 52 週高低區間位階超過底部 30%（如 6112 / 4967 / 00752 案例）
+    data = []
+    for _ in range(199):
+        data.append({'Open': 95, 'High': 100, 'Low': 90, 'Close': 95})
+    # 在 25 週前曾跌至 40（使 52 週區間為 40 ~ 100，底部 30% 上限為 58）
+    data[-25] = {'Open': 45, 'High': 48, 'Low': 40, 'Close': 44}
+    # 但在 80 附近形成兩個相距 >= 5 週的 Swing Low（位處 52 週區間約 67% 高檔位置）
+    data[-15] = {'Open': 82, 'High': 85, 'Low': 80, 'Close': 83}
+    data[-7] = {'Open': 83, 'High': 86, 'Low': 81, 'Close': 84}
+    # 當週在 80 出現假跌破長下影線，但因位階高於 52 週底部 30%，應回傳 none
+    data.append({'Open': 83, 'High': 85, 'Low': 78, 'Close': 82})
+    weekly_data = pd.DataFrame(data)
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
+
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'none'
+
+def test_evaluate_trend_reversal_criteria_fail_if_swing_lows_too_close():
+    # 測試構成邊界的兩個 Swing Lows 間隔 < 5 週（如 4967 僅間隔 3 週）
+    data = []
+    for _ in range(199):
+        data.append({'Open': 100, 'High': 105, 'Low': 95, 'Close': 100})
+    # B 點與 A 點僅間隔 4 週 (-11 與 -7，差 4 < 5)
+    data[-11] = {'Open': 53, 'High': 56, 'Low': 51, 'Close': 54}
+    data[-7] = {'Open': 52, 'High': 55, 'Low': 50, 'Close': 53}
+    data.append({'Open': 54, 'High': 55, 'Low': 48, 'Close': 52})
+    weekly_data = pd.DataFrame(data)
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
+
+    assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'none'
+
+def test_evaluate_trend_reversal_criteria_fail_if_approaching_in_uptrend_like_acn():
+    # 測試 ACN 11/07 案例：前幾週是一路往上的多頭趨勢（並非由上往下回踩關鍵邊界）
+    weekly_data = create_mock_weekly_data(a_price=50, b_price=51, last_low=48, last_close=52, shadow_ratio=0.6)
+    # 將測試週之前的 3 根週 K 改為由下往上連續墊高的趨勢
+    weekly_data.iloc[-4] = {'Open': 44, 'High': 47, 'Low': 43, 'Close': 46}
+    weekly_data.iloc[-3] = {'Open': 46, 'High': 49, 'Low': 45, 'Close': 48}
+    weekly_data.iloc[-2] = {'Open': 48, 'High': 53, 'Low': 47, 'Close': 51}
+    daily_data = create_mock_daily_data_pattern(p1=100, p2=120, p3=80, p4=110, p5=100)
+
     assert evaluate_trend_reversal_criteria(daily_data, weekly_data) == 'none'
 
 
