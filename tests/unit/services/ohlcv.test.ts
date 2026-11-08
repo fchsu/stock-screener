@@ -6,6 +6,7 @@ import {
   calculateSupportBoundary,
   formatChartVolume,
   computeBarLegendData,
+  findMatchingBarForCrosshair,
   type OHLCVBar,
 } from '@/lib/ohlcv'
 import { GET } from '@/app/api/ohlcv/route'
@@ -257,5 +258,26 @@ describe('ohlcv utilities', () => {
       close: 243,
       volume: 110000000,
     })
+  })
+
+  it('should match corresponding bar across 1d and 1wk timeframes for crosshair sync', () => {
+    const weeklyBars: OHLCVBar[] = [
+      { time: 1792944000, open: 100, high: 110, low: 95, close: 105, volume: 1000 }, // 2026-10-26 00:00
+      { time: 1793548800, open: 105, high: 115, low: 102, close: 112, volume: 1200 }, // 2026-11-02 00:00
+    ]
+    const dailyBars: OHLCVBar[] = [
+      { time: 1793062800, open: 100, high: 104, low: 98, close: 102, volume: 200 }, // 2026-10-27 09:00
+      { time: 1793322000, open: 103, high: 110, low: 101, close: 105, volume: 300 }, // 2026-10-30 09:00
+      { time: 1793581200, open: 105, high: 108, low: 104, close: 107, volume: 250 }, // 2026-11-02 09:00
+      { time: 1793754000, open: 108, high: 115, low: 106, close: 112, volume: 400 }, // 2026-11-04 09:00
+    ]
+
+    // 日K (11/04) 同步至週K -> 應對齊 11/02 當週週K
+    const matchedWeek = findMatchingBarForCrosshair(weeklyBars, '1wk', 1793754000, '1d')
+    expect(matchedWeek?.time).toBe(1793548800)
+
+    // 週K (10/26 00:00) 同步至日K -> 應對齊該週最後一個交易日 (10/30 09:00)
+    const matchedDay = findMatchingBarForCrosshair(dailyBars, '1d', 1792944000, '1wk')
+    expect(matchedDay?.time).toBe(1793322000)
   })
 })

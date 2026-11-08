@@ -11,6 +11,8 @@ const mockSubscribeVisibleLogicalRangeChange = vi.fn()
 const mockUnsubscribeVisibleLogicalRangeChange = vi.fn()
 const mockSubscribeCrosshairMove = vi.fn()
 const mockUnsubscribeCrosshairMove = vi.fn()
+const mockSetCrosshairPosition = vi.fn()
+const mockClearCrosshairPosition = vi.fn()
 const mockRemove = vi.fn()
 
 vi.mock('lightweight-charts', () => ({
@@ -19,6 +21,7 @@ vi.mock('lightweight-charts', () => ({
       setData: mockSetData,
       createPriceLine: mockCreatePriceLine,
       priceToCoordinate: vi.fn(() => 180),
+      coordinateToPrice: vi.fn(() => 508),
       attachPrimitive: vi.fn(),
       priceScale: vi.fn(() => ({ applyOptions: vi.fn() })),
     })),
@@ -30,6 +33,8 @@ vi.mock('lightweight-charts', () => ({
     })),
     subscribeCrosshairMove: mockSubscribeCrosshairMove,
     unsubscribeCrosshairMove: mockUnsubscribeCrosshairMove,
+    setCrosshairPosition: mockSetCrosshairPosition,
+    clearCrosshairPosition: mockClearCrosshairPosition,
     applyOptions: vi.fn(),
     remove: mockRemove,
   })),
@@ -141,6 +146,75 @@ describe('StockChart', () => {
     const swapBtn = screen.getByRole('button', { name: /切換日\/週線/ })
     fireEvent.click(swapBtn)
     expect(screen.getByText('子圖：日K')).toBeInTheDocument()
+  })
+
+  it('should synchronize crosshair position between main and sub charts in pip mode', () => {
+    const mock1wkResult = {
+      data: {
+        symbol: '2330.TW',
+        interval: '1wk',
+        bars: [
+          { time: 1792944000, open: 500, high: 520, low: 495, close: 510, volume: 50000000 },
+          { time: 1793548800, open: 510, high: 535, low: 505, close: 530, volume: 60000000 },
+        ],
+        supportBoundary: 495,
+      },
+      isLoading: false,
+      isError: false,
+    }
+    const mock1dResult = {
+      data: {
+        symbol: '2330.TW',
+        interval: '1d',
+        bars: [
+          { time: 1793322000, open: 505, high: 520, low: 500, close: 510, volume: 12000000 },
+          { time: 1793754000, open: 515, high: 535, low: 512, close: 530, volume: 18000000 },
+        ],
+        supportBoundary: 495,
+      },
+      isLoading: false,
+      isError: false,
+    }
+    vi.mocked(queries.useStockOHLCV).mockImplementation((_symbol, interval) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (interval === '1wk' ? mock1wkResult : mock1dResult) as any
+    })
+
+    render(
+      <StockChart
+        stock={mockStock}
+        activeInterval="1d"
+        onSelectInterval={vi.fn()}
+        viewMode="pip"
+        onChangeViewMode={vi.fn()}
+      />
+    )
+
+    // 主圖 (1d) 為第一個註冊的 crosshair handler，子圖 (1wk) 為第二個
+    const mainCrosshairHandler = mockSubscribeCrosshairMove.mock.calls[0]?.[0]
+    const subCrosshairHandler = mockSubscribeCrosshairMove.mock.calls[1]?.[0]
+    expect(mainCrosshairHandler).toBeDefined()
+    expect(subCrosshairHandler).toBeDefined()
+
+    // 1. 滑鼠在主圖 (1d) 移動至 11/04 (1793754000)，子圖 (1wk) 應同步顯示十字線於當週 11/02 (1793548800)
+    act(() => {
+      mainCrosshairHandler({ time: 1793754000, point: { x: 200, y: 120 } })
+    })
+    expect(mockSetCrosshairPosition).toHaveBeenCalledWith(508, 1793548800, expect.anything())
+
+    // 2. 滑鼠在子圖 (1wk) 移動至 10/26 當週 (1792944000)，主圖 (1d) 應同步顯示十字線於該週交易日 10/30 (1793322000) 並更新左上角圖例
+    mockSetCrosshairPosition.mockClear()
+    act(() => {
+      subCrosshairHandler({ time: 1792944000, point: { x: 80, y: 60 } })
+    })
+    expect(mockSetCrosshairPosition).toHaveBeenCalledWith(508, 1793322000, expect.anything())
+    expect(screen.getByTestId('ohlcv-legend')).toHaveTextContent('開 505')
+
+    // 3. 滑鼠移出子圖時，應清除另一側的十字線
+    act(() => {
+      subCrosshairHandler({})
+    })
+    expect(mockClearCrosshairPosition).toHaveBeenCalled()
   })
 
   it('should preserve zoomed bar count across timeframe and stock switches', () => {

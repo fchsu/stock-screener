@@ -287,3 +287,35 @@ export function computeBarLegendData(
     formattedVolume: formatChartVolume(bar.volume, market),
   }
 }
+
+/**
+ * 跨時框十字線同步：根據來源時框的時間戳，在目標時框 K 棒陣列中尋找對應的 K 棒
+ */
+export function findMatchingBarForCrosshair(
+  bars: OHLCVBar[],
+  targetInterval: ChartInterval,
+  sourceTime: number,
+  sourceInterval: ChartInterval
+): OHLCVBar | null {
+  if (bars.length === 0) return null
+
+  if (sourceInterval === '1wk' && targetInterval !== '1wk') {
+    const exact = bars.find((b) => b.time === sourceTime)
+    if (exact) return exact
+
+    const weekEnd = sourceTime + 7 * 86400
+    for (let i = bars.length - 1; i >= 0; i--) {
+      if (bars[i].time >= sourceTime && bars[i].time < weekEnd) {
+        return bars[i]
+      }
+    }
+  }
+
+  for (let i = bars.length - 1; i >= 0; i--) {
+    if (bars[i].time <= sourceTime) {
+      return bars[i]
+    }
+  }
+
+  return bars[0]
+}

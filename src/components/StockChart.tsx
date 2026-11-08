@@ -13,6 +13,7 @@ import {
 import { useStockOHLCV } from '@/services/queries'
 import {
   computeBarLegendData,
+  findMatchingBarForCrosshair,
   type BarLegendData,
   type ChartInterval,
   type OHLCVBar,
@@ -20,6 +21,76 @@ import {
 import type { StockAsset } from '@/lib/types'
 
 export type ChartViewMode = 'single' | 'pip' | 'multi'
+
+interface PaneCrosshairHandle {
+  setSyncedCrosshair: (
+    sourceTime: number,
+    sourcePrice: number | null,
+    sourceInterval: ChartInterval
+  ) => void
+  clearSyncedCrosshair: () => void
+}
+
+interface CrosshairSyncController {
+  register: (interval: ChartInterval, handle: PaneCrosshairHandle) => () => void
+  notifyMove: (sourceInterval: ChartInterval, time: number, price: number | null) => void
+  notifyLeave: (sourceInterval: ChartInterval) => void
+}
+
+function createCrosshairSyncController(): CrosshairSyncController {
+  const state: {
+    panes: Map<ChartInterval, PaneCrosshairHandle>
+    isSyncing: boolean
+    activeSource: ChartInterval | null
+  } = {
+    panes: new Map(),
+    isSyncing: false,
+    activeSource: null,
+  }
+
+  return {
+    register(interval, handle) {
+      state.panes.set(interval, handle)
+      return () => {
+        if (state.panes.get(interval) === handle) {
+          state.panes.delete(interval)
+        }
+        if (state.activeSource === interval) {
+          state.activeSource = null
+        }
+      }
+    },
+    notifyMove(sourceInterval, time, price) {
+      if (state.isSyncing) return
+      state.isSyncing = true
+      state.activeSource = sourceInterval
+      try {
+        for (const [paneInterval, handle] of state.panes.entries()) {
+          if (paneInterval !== sourceInterval) {
+            handle.setSyncedCrosshair(time, price, sourceInterval)
+          }
+        }
+      } finally {
+        state.isSyncing = false
+      }
+    },
+    notifyLeave(sourceInterval) {
+      if (state.isSyncing) return
+      if (state.activeSource !== null && state.activeSource !== sourceInterval) return
+      state.isSyncing = true
+      state.activeSource = null
+      try {
+        for (const [paneInterval, handle] of state.panes.entries()) {
+          if (paneInterval !== sourceInterval) {
+            handle.clearSyncedCrosshair()
+          }
+        }
+      } finally {
+        state.isSyncing = false
+      }
+    },
+  }
+}
 
 export interface StockChartProps {
   stock: StockAsset
@@ -68,6 +139,7 @@ function CandlestickPane({
   viewportRef,
   compact = false,
   onSwapPip,
+  crosshairSync,
 }: {
   symbol: string
   market: string
@@ -76,6 +148,7 @@ function CandlestickPane({
   viewportRef: React.MutableRefObject<ViewportPreference>
   compact?: boolean
   onSwapPip?: () => void
+  crosshairSync?: CrosshairSyncController
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const boundaryLabelRef = useRef<HTMLDivElement | null>(null)
@@ -238,11 +311,54 @@ function CandlestickPane({
       syncLeftBoundaryLabel()
     }
 
-    const handleCrosshairMove = (param: { time?: unknown }) => {
+    const unregisterCrosshairSync = crosshairSync?.register(interval, {
+      setSyncedCrosshair(sourceTime, sourcePrice, sourceInterval) {
+        const matchedBar = findMatchingBarForCrosshair(
+          data.bars,
+          interval,
+          sourceTime,
+          sourceInterval
+        )
+        if (!matchedBar) return
+        const targetPrice =
+          sourcePrice != null && Number.isFinite(sourcePrice) ? sourcePrice : matchedBar.close
+        try {
+          chart.setCrosshairPosition?.(targetPrice, matchedBar.time as UTCTimestamp, candleSeries)
+        } catch {
+          // 忽略圖表尚未完成初次佈局時的座標換算例外
+        }
+        setHoveredTime(matchedBar.time)
+      },
+      clearSyncedCrosshair() {
+        try {
+          chart.clearCrosshairPosition?.()
+        } catch {
+          // 忽略圖表銷毀前之清理例外
+        }
+        setHoveredTime(null)
+      },
+    })
+
+    const handleCrosshairMove = (param: { time?: unknown; point?: { x: number; y: number } }) => {
       if (typeof param?.time === 'number') {
         setHoveredTime(param.time)
+        if (crosshairSync) {
+          let price: number | null = null
+          if (param.point && typeof param.point.y === 'number') {
+            const coordPrice = candleSeries.coordinateToPrice?.(param.point.y)
+            if (typeof coordPrice === 'number' && Number.isFinite(coordPrice)) {
+              price = coordPrice
+            }
+          }
+          if (price == null) {
+            const matched = barLookup.get(param.time)?.bar
+            price = matched ? matched.close : null
+          }
+          crosshairSync.notifyMove(interval, param.time, price)
+        }
       } else {
         setHoveredTime(null)
+        crosshairSync?.notifyLeave(interval)
       }
     }
 
@@ -265,12 +381,13 @@ function CandlestickPane({
     }
 
     return () => {
+      unregisterCrosshairSync?.()
       chart.timeScale().unsubscribeVisibleLogicalRangeChange?.(handleLogicalRangeChange)
       chart.unsubscribeCrosshairMove?.(handleCrosshairMove)
       resizeObserver?.disconnect()
       chart.remove()
     }
-  }, [compact, data, interval, symbol, viewportRef])
+  }, [barLookup, compact, crosshairSync, data, interval, symbol, viewportRef])
 
   const isUp = (legendData?.change ?? 0) >= 0
   const changeColorClass = isUp
@@ -404,6 +521,8 @@ export default function StockChart({
     barCount: 60,
     rightOffset: DEFAULT_RIGHT_OFFSET,
   })
+
+  const crosshairSync = useMemo(() => createCrosshairSyncController(), [])
 
   const handleModeSelect = (mode: ChartViewMode) => {
     if (onChangeViewMode) {
@@ -542,6 +661,7 @@ export default function StockChart({
             market={stock.market}
             interval={pipMainInterval}
             viewportRef={viewportRef}
+            crosshairSync={crosshairSync}
           />
           {/* 左下角子圖：與單圖相同長寬比 (w-[30%] h-[30%]) */}
           <div
@@ -556,6 +676,7 @@ export default function StockChart({
               viewportRef={pipSubViewportRef}
               compact={true}
               onSwapPip={handleSwapPip}
+              crosshairSync={crosshairSync}
             />
           </div>
         </div>
