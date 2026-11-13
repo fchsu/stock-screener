@@ -8,9 +8,15 @@ import {
   ColorType,
   CrosshairMode,
   LineStyle,
+  type Logical,
   type UTCTimestamp,
 } from 'lightweight-charts'
 import { useStockOHLCV } from '@/services/queries'
+import { useChartDrawings, useChartDrawingMutations } from '@/services/drawing-queries'
+import type { AuthUser } from '@/services/auth'
+import ChartDrawingToolbar from '@/components/ChartDrawingToolbar'
+import ChartDrawingOverlay, { type ChartCoordinateAdapter } from '@/components/ChartDrawingOverlay'
+import { computeRequiredRightOffset, DEFAULT_DRAWING_STYLE } from '@/lib/drawing-utils'
 import {
   computeBarLegendData,
   findMatchingBarForCrosshair,
@@ -18,7 +24,14 @@ import {
   type ChartInterval,
   type OHLCVBar,
 } from '@/lib/ohlcv'
-import type { StockAsset } from '@/lib/types'
+import type {
+  ActiveDrawingTool,
+  ChartDrawing,
+  DrawingPoint,
+  DrawingStyle,
+  DrawingToolType,
+  StockAsset,
+} from '@/lib/types'
 
 export type ChartViewMode = 'single' | 'pip' | 'multi'
 
@@ -99,6 +112,7 @@ export interface StockChartProps {
   viewMode: ChartViewMode
   onChangeViewMode?: (mode: ChartViewMode) => void
   onToggleViewMode?: () => void
+  user?: AuthUser | null
 }
 
 interface ViewportPreference {
@@ -107,7 +121,7 @@ interface ViewportPreference {
 }
 
 const DEFAULT_BAR_COUNT = 90
-const DEFAULT_RIGHT_OFFSET = 2
+const DEFAULT_RIGHT_OFFSET = 12
 
 const INTERVAL_OPTIONS: Array<{ value: ChartInterval; label: string; shortcut: string }> = [
   { value: '60m', label: '60K', shortcut: '1' },
@@ -140,6 +154,14 @@ function CandlestickPane({
   compact = false,
   onSwapPip,
   crosshairSync,
+  interactiveDrawings = false,
+  drawings = [],
+  activeTool = 'cursor',
+  currentStyle = DEFAULT_DRAWING_STYLE,
+  selectedDrawingId = null,
+  onSelectDrawing,
+  onCreateDrawing,
+  onUpdateDrawingPoints,
 }: {
   symbol: string
   market: string
@@ -149,12 +171,66 @@ function CandlestickPane({
   compact?: boolean
   onSwapPip?: () => void
   crosshairSync?: CrosshairSyncController
+  interactiveDrawings?: boolean
+  drawings?: ChartDrawing[]
+  activeTool?: ActiveDrawingTool
+  currentStyle?: DrawingStyle
+  selectedDrawingId?: string | null
+  onSelectDrawing?: (id: string | null) => void
+  onCreateDrawing?: (payload: {
+    toolType: DrawingToolType
+    points: DrawingPoint[]
+    style: DrawingStyle
+  }) => void
+  onUpdateDrawingPoints?: (id: string, points: DrawingPoint[]) => void
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const boundaryLabelRef = useRef<HTMLDivElement | null>(null)
   const prevIntervalRef = useRef<ChartInterval>(interval)
+  const chartInstanceRef = useRef<ReturnType<typeof createChart> | null>(null)
+  const candleSeriesInstanceRef = useRef<ReturnType<
+    ReturnType<typeof createChart>['addSeries']
+  > | null>(null)
+  const syncedDrawingKeyRef = useRef<string>('')
+  const drawingsRef = useRef<ChartDrawing[]>(drawings)
+  useEffect(() => {
+    drawingsRef.current = drawings
+  }, [drawings])
   const { data, isLoading, isError } = useStockOHLCV(symbol, interval)
   const [hoveredTime, setHoveredTime] = useState<number | null>(null)
+  const [chartRevision, setChartRevision] = useState(0)
+
+  const drawingAdapter = useMemo<ChartCoordinateAdapter>(
+    () => ({
+      coordinateToLogical: (x) => {
+        const val = chartInstanceRef.current?.timeScale().coordinateToLogical?.(x)
+        return typeof val === 'number' && Number.isFinite(val) ? val : null
+      },
+      logicalToCoordinate: (logical) => {
+        const val = chartInstanceRef.current?.timeScale().logicalToCoordinate?.(logical as Logical)
+        return typeof val === 'number' && Number.isFinite(val) ? val : null
+      },
+      timeToCoordinate: (time) => {
+        const val = chartInstanceRef.current?.timeScale().timeToCoordinate?.(time as UTCTimestamp)
+        return typeof val === 'number' && Number.isFinite(val) ? val : null
+      },
+      coordinateToPrice: (y) => {
+        const val = candleSeriesInstanceRef.current?.coordinateToPrice?.(y)
+        return typeof val === 'number' && Number.isFinite(val) ? val : null
+      },
+      priceToCoordinate: (price) => {
+        const val = candleSeriesInstanceRef.current?.priceToCoordinate?.(price)
+        return typeof val === 'number' && Number.isFinite(val) ? val : null
+      },
+      setChartInteractionLocked: (locked) => {
+        chartInstanceRef.current?.applyOptions?.({
+          handleScroll: !locked,
+          handleScale: !locked,
+        })
+      },
+    }),
+    []
+  )
 
   // 建立時間戳對應 K 棒與前一根 K 棒的索引表，供十字線移動時 O(1) 查詢
   const barLookup = useMemo(() => {
@@ -255,7 +331,10 @@ function CandlestickPane({
       }))
     )
 
-    const syncLeftBoundaryLabel = () => {
+    const syncOverlayAndBoundary = () => {
+      if (interactiveDrawings) {
+        setChartRevision((r) => r + 1)
+      }
       const labelEl = boundaryLabelRef.current
       if (!labelEl || data.supportBoundary == null) return
       const coord = candleSeries.priceToCoordinate?.(data.supportBoundary)
@@ -277,18 +356,34 @@ function CandlestickPane({
         axisLabelVisible: true,
         title: '',
       })
-
-      candleSeries.attachPrimitive?.({
-        updateAllViews: syncLeftBoundaryLabel,
-      })
     }
+
+    candleSeries.attachPrimitive?.({
+      updateAllViews: syncOverlayAndBoundary,
+    })
+
+    chartInstanceRef.current = chart
+    candleSeriesInstanceRef.current = candleSeries
 
     const totalBars = data.bars.length
     const isIntervalSwitch = prevIntervalRef.current !== interval
     prevIntervalRef.current = interval
 
+    const allDrawingPoints = drawingsRef.current.flatMap((d) => d.points)
+    const requiredRightOffset = computeRequiredRightOffset(
+      data.bars,
+      interval,
+      allDrawingPoints,
+      DEFAULT_RIGHT_OFFSET
+    )
+
     if (isIntervalSwitch) {
-      viewportRef.current.rightOffset = DEFAULT_RIGHT_OFFSET
+      viewportRef.current.rightOffset = requiredRightOffset
+    } else if (
+      viewportRef.current.rightOffset === DEFAULT_RIGHT_OFFSET &&
+      requiredRightOffset > DEFAULT_RIGHT_OFFSET
+    ) {
+      viewportRef.current.rightOffset = requiredRightOffset
     }
 
     const barCount = Math.max(10, viewportRef.current.barCount)
@@ -296,7 +391,21 @@ function CandlestickPane({
     const from = to - barCount
 
     chart.timeScale().setVisibleLogicalRange?.({ from, to })
-    syncLeftBoundaryLabel()
+    const syncKey = `${symbol}:${interval}:${totalBars}`
+    if (interactiveDrawings && syncedDrawingKeyRef.current !== syncKey) {
+      syncedDrawingKeyRef.current = syncKey
+      setChartRevision((r) => r + 1)
+    }
+    if (data.supportBoundary != null && boundaryLabelRef.current) {
+      const coord = candleSeries.priceToCoordinate?.(data.supportBoundary)
+      const paneHeight = container.clientHeight || (compact ? 160 : 520)
+      if (coord == null || Number.isNaN(coord) || coord < 8 || coord > paneHeight - 24) {
+        boundaryLabelRef.current.style.opacity = '0'
+      } else {
+        boundaryLabelRef.current.style.opacity = '1'
+        boundaryLabelRef.current.style.top = `${coord}px`
+      }
+    }
     isApplyingRange = false
 
     const handleLogicalRangeChange = (range: { from: number; to: number } | null) => {
@@ -308,7 +417,7 @@ function CandlestickPane({
           rightOffset: range.to - (totalBars - 1),
         }
       }
-      syncLeftBoundaryLabel()
+      syncOverlayAndBoundary()
     }
 
     const unregisterCrosshairSync = crosshairSync?.register(interval, {
@@ -374,20 +483,22 @@ function CandlestickPane({
             width: entry.contentRect.width,
             height: entry.contentRect.height,
           })
-          syncLeftBoundaryLabel()
+          syncOverlayAndBoundary()
         }
       })
       resizeObserver.observe(container)
     }
 
     return () => {
+      chartInstanceRef.current = null
+      candleSeriesInstanceRef.current = null
       unregisterCrosshairSync?.()
       chart.timeScale().unsubscribeVisibleLogicalRangeChange?.(handleLogicalRangeChange)
       chart.unsubscribeCrosshairMove?.(handleCrosshairMove)
       resizeObserver?.disconnect()
       chart.remove()
     }
-  }, [barLookup, compact, crosshairSync, data, interval, symbol, viewportRef])
+  }, [barLookup, compact, crosshairSync, data, interactiveDrawings, interval, symbol, viewportRef])
 
   const isUp = (legendData?.change ?? 0) >= 0
   const changeColorClass = isUp
@@ -488,9 +599,31 @@ function CandlestickPane({
 
         <div
           ref={containerRef}
+          onClick={() => {
+            if (activeTool === 'cursor' && selectedDrawingId) {
+              onSelectDrawing?.(null)
+            }
+          }}
           className="h-full w-full"
           data-testid={`chart-canvas-${interval}`}
         />
+
+        {interactiveDrawings && data && data.bars.length > 0 && (
+          <ChartDrawingOverlay
+            bars={data.bars}
+            interval={interval}
+            adapter={drawingAdapter}
+            drawings={drawings}
+            activeTool={activeTool}
+            currentStyle={currentStyle}
+            selectedDrawingId={selectedDrawingId}
+            revision={chartRevision}
+            interactive={interactiveDrawings}
+            onSelectDrawing={(id) => onSelectDrawing?.(id)}
+            onCreateDrawing={(payload) => onCreateDrawing?.(payload)}
+            onUpdateDrawingPoints={(id, points) => onUpdateDrawingPoints?.(id, points)}
+          />
+        )}
       </div>
     </div>
   )
@@ -503,12 +636,114 @@ export default function StockChart({
   viewMode,
   onChangeViewMode,
   onToggleViewMode,
+  user = null,
 }: StockChartProps) {
   const [pipMainInterval, setPipMainInterval] = useState<'1d' | '1wk'>('1d')
   const pipSubInterval: ChartInterval = pipMainInterval === '1d' ? '1wk' : '1d'
 
   const effectiveMainInterval = viewMode === 'pip' ? pipMainInterval : activeInterval
   const { data: activeData } = useStockOHLCV(stock.symbol, effectiveMainInterval)
+  const { data: drawings = [] } = useChartDrawings(user?.id, stock.symbol)
+  const drawingMutations = useChartDrawingMutations(user?.id, stock.symbol)
+
+  const [drawingUiState, setDrawingUiState] = useState<{
+    symbol: string
+    activeTool: ActiveDrawingTool
+    selectedDrawingId: string | null
+  }>({
+    symbol: stock.symbol,
+    activeTool: 'cursor',
+    selectedDrawingId: null,
+  })
+  const [defaultStyle, setDefaultStyle] = useState<DrawingStyle>(DEFAULT_DRAWING_STYLE)
+
+  const activeTool: ActiveDrawingTool =
+    drawingUiState.symbol === stock.symbol ? drawingUiState.activeTool : 'cursor'
+  const selectedDrawingId: string | null =
+    drawingUiState.symbol === stock.symbol ? drawingUiState.selectedDrawingId : null
+
+  const selectedDrawing = useMemo(
+    () => drawings.find((d) => d.id === selectedDrawingId) ?? null,
+    [drawings, selectedDrawingId]
+  )
+
+  const setActiveTool = (tool: ActiveDrawingTool) => {
+    setDrawingUiState((prev) => ({
+      symbol: stock.symbol,
+      activeTool: tool,
+      selectedDrawingId: tool === 'cursor' ? prev.selectedDrawingId : null,
+    }))
+  }
+
+  const setSelectedDrawingId = (id: string | null) => {
+    setDrawingUiState((prev) => ({
+      symbol: stock.symbol,
+      activeTool: prev.symbol === stock.symbol ? prev.activeTool : 'cursor',
+      selectedDrawingId: id,
+    }))
+  }
+
+  const handleCreateDrawing = (payload: {
+    toolType: DrawingToolType
+    points: DrawingPoint[]
+    style: DrawingStyle
+  }) => {
+    drawingMutations.createDrawing.mutate(payload)
+    setActiveTool('cursor')
+  }
+
+  const handleUpdateDrawingPoints = (id: string, points: DrawingPoint[]) => {
+    drawingMutations.updateDrawing.mutate({ id, points })
+  }
+
+  const handleChangeDrawingStyle = (patch: Partial<DrawingStyle>) => {
+    const nextStyle: DrawingStyle = {
+      ...(selectedDrawing ? selectedDrawing.style : defaultStyle),
+      ...patch,
+    }
+    setDefaultStyle(nextStyle)
+    if (selectedDrawing) {
+      drawingMutations.updateDrawing.mutate({
+        id: selectedDrawing.id,
+        style: nextStyle,
+      })
+    }
+  }
+
+  const handleDeleteSelectedDrawing = () => {
+    if (!selectedDrawing) return
+    drawingMutations.deleteDrawing.mutate(selectedDrawing.id)
+    setSelectedDrawingId(null)
+  }
+
+  const handleClearAllDrawings = () => {
+    drawingMutations.clearSymbolDrawings.mutate()
+    setSelectedDrawingId(null)
+  }
+
+  // 支援鍵盤 Delete / Backspace 刪除選取之畫線，Escape 取消選取或切回游標
+  useEffect(() => {
+    if (!user) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedDrawingId) {
+        e.preventDefault()
+        drawingMutations.deleteDrawing.mutate(selectedDrawingId)
+        setDrawingUiState((prev) => ({ ...prev, selectedDrawingId: null }))
+      } else if (e.key === 'Escape' && activeTool !== 'path') {
+        setDrawingUiState({
+          symbol: stock.symbol,
+          activeTool: 'cursor',
+          selectedDrawingId: null,
+        })
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [activeTool, drawingMutations.deleteDrawing, selectedDrawingId, stock.symbol, user])
+
   const tvUrl = getTradingViewUrl(stock)
   const isStrict = stock.matchLevel === 'strict' || !stock.matchLevel
 
@@ -567,6 +802,20 @@ export default function StockChart({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
+          {/* 已登入使用者專屬：互動式畫線工具列 */}
+          {user && (
+            <ChartDrawingToolbar
+              activeTool={activeTool}
+              onSelectTool={setActiveTool}
+              currentStyle={defaultStyle}
+              onChangeStyle={handleChangeDrawingStyle}
+              selectedDrawing={selectedDrawing}
+              drawingCount={drawings.length}
+              onDeleteSelected={handleDeleteSelectedDrawing}
+              onClearAll={handleClearAllDrawings}
+            />
+          )}
+
           {/* 子母模式專屬：日線 / 週線互換按鈕 */}
           {viewMode === 'pip' && (
             <button
@@ -651,6 +900,14 @@ export default function StockChart({
           market={stock.market}
           interval={activeInterval}
           viewportRef={viewportRef}
+          interactiveDrawings={Boolean(user)}
+          drawings={drawings}
+          activeTool={activeTool}
+          currentStyle={defaultStyle}
+          selectedDrawingId={selectedDrawingId}
+          onSelectDrawing={setSelectedDrawingId}
+          onCreateDrawing={handleCreateDrawing}
+          onUpdateDrawingPoints={handleUpdateDrawingPoints}
         />
       )}
 
@@ -662,6 +919,14 @@ export default function StockChart({
             interval={pipMainInterval}
             viewportRef={viewportRef}
             crosshairSync={crosshairSync}
+            interactiveDrawings={Boolean(user)}
+            drawings={drawings}
+            activeTool={activeTool}
+            currentStyle={defaultStyle}
+            selectedDrawingId={selectedDrawingId}
+            onSelectDrawing={setSelectedDrawingId}
+            onCreateDrawing={handleCreateDrawing}
+            onUpdateDrawingPoints={handleUpdateDrawingPoints}
           />
           {/* 左下角子圖：與單圖相同長寬比 (w-[30%] h-[30%]) */}
           <div
@@ -677,6 +942,14 @@ export default function StockChart({
               compact={true}
               onSwapPip={handleSwapPip}
               crosshairSync={crosshairSync}
+              interactiveDrawings={Boolean(user)}
+              drawings={drawings}
+              activeTool={activeTool}
+              currentStyle={defaultStyle}
+              selectedDrawingId={selectedDrawingId}
+              onSelectDrawing={setSelectedDrawingId}
+              onCreateDrawing={handleCreateDrawing}
+              onUpdateDrawingPoints={handleUpdateDrawingPoints}
             />
           </div>
         </div>
@@ -690,6 +963,14 @@ export default function StockChart({
             interval="1wk"
             title="週K（位置與長下影線）"
             viewportRef={viewportRef}
+            interactiveDrawings={Boolean(user)}
+            drawings={drawings}
+            activeTool={activeTool}
+            currentStyle={defaultStyle}
+            selectedDrawingId={selectedDrawingId}
+            onSelectDrawing={setSelectedDrawingId}
+            onCreateDrawing={handleCreateDrawing}
+            onUpdateDrawingPoints={handleUpdateDrawingPoints}
           />
           <CandlestickPane
             symbol={stock.symbol}
@@ -697,6 +978,14 @@ export default function StockChart({
             interval="1d"
             title="日K（破底翻型態）"
             viewportRef={viewportRef}
+            interactiveDrawings={Boolean(user)}
+            drawings={drawings}
+            activeTool={activeTool}
+            currentStyle={defaultStyle}
+            selectedDrawingId={selectedDrawingId}
+            onSelectDrawing={setSelectedDrawingId}
+            onCreateDrawing={handleCreateDrawing}
+            onUpdateDrawingPoints={handleUpdateDrawingPoints}
           />
           <CandlestickPane
             symbol={stock.symbol}
@@ -704,6 +993,14 @@ export default function StockChart({
             interval="60m"
             title="60K（短線轉折結構）"
             viewportRef={viewportRef}
+            interactiveDrawings={Boolean(user)}
+            drawings={drawings}
+            activeTool={activeTool}
+            currentStyle={defaultStyle}
+            selectedDrawingId={selectedDrawingId}
+            onSelectDrawing={setSelectedDrawingId}
+            onCreateDrawing={handleCreateDrawing}
+            onUpdateDrawingPoints={handleUpdateDrawingPoints}
           />
         </div>
       )}

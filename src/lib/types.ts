@@ -7,4 +7,10 @@ export type {
   WatchlistGroup,
   WatchlistItem,
   WatchlistWithDetails,
+  DrawingToolType,
+  ActiveDrawingTool,
+  DrawingLineStyle,
+  DrawingPoint,
+  DrawingStyle,
+  ChartDrawing,
 } from './database.types'

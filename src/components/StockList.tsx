@@ -473,6 +473,7 @@ export default function StockList({
             }}
             viewMode={viewMode}
             onChangeViewMode={setViewMode}
+            user={user}
           />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white/50 p-8 text-center text-gray-500 dark:border-gray-800 dark:bg-gray-950/50">

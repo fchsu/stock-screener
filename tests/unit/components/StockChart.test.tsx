@@ -30,6 +30,9 @@ vi.mock('lightweight-charts', () => ({
       setVisibleLogicalRange: mockSetVisibleLogicalRange,
       subscribeVisibleLogicalRangeChange: mockSubscribeVisibleLogicalRangeChange,
       unsubscribeVisibleLogicalRangeChange: mockUnsubscribeVisibleLogicalRangeChange,
+      coordinateToLogical: vi.fn((x: number) => x / 100),
+      logicalToCoordinate: vi.fn((logical: number) => logical * 100),
+      timeToCoordinate: vi.fn(() => 100),
     })),
     subscribeCrosshairMove: mockSubscribeCrosshairMove,
     unsubscribeCrosshairMove: mockUnsubscribeCrosshairMove,
@@ -47,6 +50,35 @@ vi.mock('lightweight-charts', () => ({
 
 vi.mock('@/services/queries', () => ({
   useStockOHLCV: vi.fn(),
+}))
+
+const mockCreateDrawingMutate = vi.fn()
+const mockUpdateDrawingMutate = vi.fn()
+const mockDeleteDrawingMutate = vi.fn()
+const mockClearDrawingsMutate = vi.fn()
+
+vi.mock('@/services/drawing-queries', () => ({
+  useChartDrawings: vi.fn(() => ({
+    data: [
+      {
+        id: 'd-existing-1',
+        user_id: 'u-1',
+        symbol: '2330.TW',
+        tool_type: 'horizontal',
+        points: [{ time: 1700000000, price: 500 }],
+        style: { color: '#3b82f6', lineWidth: 2, lineStyle: 'solid' },
+        created_at: '',
+        updated_at: '',
+      },
+    ],
+    isLoading: false,
+  })),
+  useChartDrawingMutations: vi.fn(() => ({
+    createDrawing: { mutate: mockCreateDrawingMutate },
+    updateDrawing: { mutate: mockUpdateDrawingMutate },
+    deleteDrawing: { mutate: mockDeleteDrawingMutate },
+    clearSymbolDrawings: { mutate: mockClearDrawingsMutate },
+  })),
 }))
 
 const mockStock: StockAsset = {
@@ -270,5 +302,65 @@ describe('StockChart', () => {
     expect(mockSetVisibleLogicalRange).toHaveBeenCalled()
     const appliedRange = mockSetVisibleLogicalRange.mock.calls[0][0]
     expect(Math.round(appliedRange.to - appliedRange.from)).toBe(50)
+  })
+
+  it('leaves 12 bars of future rightOffset by default and shows drawing toolbar & overlay only when authenticated', () => {
+    vi.mocked(queries.useStockOHLCV).mockReturnValue({
+      data: {
+        symbol: '2330.TW',
+        interval: '1d',
+        bars: [
+          { time: 1700000000, open: 500, high: 510, low: 495, close: 500, volume: 10000000 },
+          { time: 1700086400, open: 505, high: 525, low: 502, close: 520, volume: 25000000 },
+        ],
+        supportBoundary: 495,
+      },
+      isLoading: false,
+      isError: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    const { rerender } = render(
+      <StockChart
+        stock={mockStock}
+        activeInterval="1d"
+        onSelectInterval={vi.fn()}
+        viewMode="single"
+        onChangeViewMode={vi.fn()}
+        user={null}
+      />
+    )
+
+    // 驗證預設右側未來預留空間為 12 根 K 棒 (totalBars=2, lastIdx=1 -> to = 1 + 12 = 13)
+    expect(mockSetVisibleLogicalRange).toHaveBeenCalledWith(expect.objectContaining({ to: 13 }))
+
+    // 未登入時不顯示畫線工具列
+    expect(screen.queryByTestId('chart-drawing-toolbar')).not.toBeInTheDocument()
+
+    // 登入後顯示畫線工具列與 SVG 畫線圖層，並可切換工具繪製水平線
+    rerender(
+      <StockChart
+        stock={mockStock}
+        activeInterval="1d"
+        onSelectInterval={vi.fn()}
+        viewMode="single"
+        onChangeViewMode={vi.fn()}
+        user={{ id: 'u-1', email: 'owner@example.com' }}
+      />
+    )
+
+    expect(screen.getByTestId('chart-drawing-toolbar')).toBeInTheDocument()
+    expect(screen.getByTestId('drawing-line-d-existing-1')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /水平線/ }))
+    const overlay = screen.getByTestId('chart-drawing-overlay-1d')
+    fireEvent.click(overlay, { clientX: 100, clientY: 140 })
+
+    expect(mockCreateDrawingMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolType: 'horizontal',
+        points: [{ time: 1700086400, price: 508 }],
+      })
+    )
   })
 })

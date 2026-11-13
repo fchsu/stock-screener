@@ -55,6 +55,32 @@ export type WatchlistWithDetails = Watchlist & {
   items: WatchlistItem[]
 }
 
+export type DrawingToolType = 'horizontal' | 'path'
+export type ActiveDrawingTool = 'cursor' | DrawingToolType
+export type DrawingLineStyle = 'solid' | 'dashed' | 'dotted'
+
+export type DrawingPoint = {
+  time: number
+  price: number
+}
+
+export type DrawingStyle = {
+  color: string
+  lineWidth: 1 | 2 | 3
+  lineStyle: DrawingLineStyle
+}
+
+export type ChartDrawing = {
+  id: string
+  user_id: string
+  symbol: string
+  tool_type: DrawingToolType
+  points: DrawingPoint[]
+  style: DrawingStyle
+  created_at: string
+  updated_at: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -90,6 +116,16 @@ export type Database = {
           created_at?: string
         }
         Update: Partial<Omit<WatchlistItem, 'id' | 'watchlist_id' | 'created_at'>>
+        Relationships: []
+      }
+      chart_drawings: {
+        Row: ChartDrawing
+        Insert: Omit<ChartDrawing, 'id' | 'created_at' | 'updated_at'> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<ChartDrawing, 'id' | 'user_id' | 'symbol' | 'created_at'>>
         Relationships: []
       }
     }

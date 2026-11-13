@@ -66,6 +66,19 @@ vi.mock('@/services/watchlist-queries', () => ({
   })),
 }))
 
+vi.mock('@/services/drawing-queries', () => ({
+  useChartDrawings: vi.fn(() => ({
+    data: [],
+    isLoading: false,
+  })),
+  useChartDrawingMutations: vi.fn(() => ({
+    createDrawing: { mutate: vi.fn() },
+    updateDrawing: { mutate: vi.fn() },
+    deleteDrawing: { mutate: vi.fn() },
+    clearSymbolDrawings: { mutate: vi.fn() },
+  })),
+}))
+
 describe('StockList (Sidebar + Chart Workspace)', () => {
   it('should display loading state', () => {
     vi.mocked(queries.useScreeningResult).mockReturnValue({
